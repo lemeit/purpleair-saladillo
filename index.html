@@ -189,6 +189,82 @@
     margin-bottom: 20px;
   }
 
+  .chart-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .controls-right {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+
+  .range-buttons {
+    display: flex;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .range-btn {
+    font-family: var(--font-display);
+    font-size: 12px;
+    color: var(--text-dim);
+    background: transparent;
+    border: none;
+    padding: 6px 14px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+
+  .range-btn:hover {
+    background: var(--bg-panel-hover);
+  }
+
+  .range-btn.active {
+    background: var(--accent-dim);
+    color: var(--accent);
+  }
+
+  .export-btn {
+    font-family: var(--font-display);
+    font-size: 12px;
+    color: var(--text-dim);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 14px;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+  }
+
+  .export-btn:hover {
+    border-color: var(--accent-dim);
+    color: var(--accent);
+  }
+
+  .channel-toggle {
+    display: flex;
+    gap: 16px;
+    margin-top: 12px;
+    font-family: var(--font-display);
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  .channel-toggle label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+  }
+
   .empty-state {
     text-align: center;
     color: var(--text-dim);
@@ -224,8 +300,21 @@
   <div class="grid" id="sensor-grid"></div>
 
   <div class="panel">
-    <div class="panel-title" id="chart-title">Seleccioná una institución para ver el histórico</div>
+    <div class="chart-controls">
+      <div class="panel-title" id="chart-title" style="margin-bottom:0;">Seleccioná una institución para ver el histórico</div>
+      <div class="controls-right">
+        <div class="range-buttons" id="range-buttons">
+          <button class="range-btn active" data-range="24h">24h</button>
+          <button class="range-btn" data-range="7d">7d</button>
+          <button class="range-btn" data-range="30d">30d</button>
+        </div>
+        <button class="export-btn" id="export-btn">Exportar CSV</button>
+      </div>
+    </div>
     <canvas id="history-chart" height="90"></canvas>
+    <div class="channel-toggle">
+      <label><input type="checkbox" id="toggle-channels" /> Mostrar canales A/B por separado</label>
+    </div>
   </div>
 </main>
 
@@ -239,6 +328,48 @@
   const API_BASE = "https://purpleair-saladillo-api.fisicai-eureka-01.workers.dev";
 
   let chart = null;
+  let currentSensorIndex = null;
+  let currentLabel = "";
+  let currentRange = "24h";
+  let currentRows = [];
+
+  const AQI_BANDS = [
+    { from: 0, to: 50, color: "rgba(110,231,183,0.10)" },
+    { from: 50, to: 100, color: "rgba(245,213,101,0.08)" },
+    { from: 100, to: 150, color: "rgba(240,163,93,0.08)" },
+    { from: 150, to: 300, color: "rgba(239,123,123,0.08)" },
+  ];
+
+  const aqiBandsPlugin = {
+    id: "aqiBands",
+    beforeDraw(c) {
+      const { ctx, chartArea, scales } = c;
+      if (!chartArea) return;
+      const yScale = scales.y;
+      ctx.save();
+      AQI_BANDS.forEach((band) => {
+        const yFrom = yScale.getPixelForValue(pm25FromAqi(band.to));
+        const yTo = yScale.getPixelForValue(pm25FromAqi(band.from));
+        ctx.fillStyle = band.color;
+        ctx.fillRect(chartArea.left, yFrom, chartArea.right - chartArea.left, yTo - yFrom);
+      });
+      ctx.restore();
+    },
+  };
+
+  function pm25FromAqi(aqi) {
+    // Inverso aproximado de pm25ToAqi, solo para dibujar las bandas de fondo
+    const breakpoints = [
+      [0, 12, 0, 50], [12.1, 35.4, 51, 100], [35.5, 55.4, 101, 150],
+      [55.5, 150.4, 151, 200], [150.5, 250.4, 201, 300],
+    ];
+    for (const [cLo, cHi, iLo, iHi] of breakpoints) {
+      if (aqi >= iLo && aqi <= iHi) {
+        return ((cHi - cLo) / (iHi - iLo)) * (aqi - iLo) + cLo;
+      }
+    }
+    return 250;
+  }
 
   function toBsAs(timestampStr) {
     // El timestamp viene de D1 como "YYYY-MM-DD HH:MM:SS" en UTC, sin sufijo de zona.
@@ -357,12 +488,19 @@
   async function selectSensor(sensorIndex, label, cardEl) {
     document.querySelectorAll(".card").forEach((c) => c.classList.remove("selected"));
     cardEl.classList.add("selected");
+    currentSensorIndex = sensorIndex;
+    currentLabel = label;
     document.getElementById("chart-title").textContent = `Histórico PM2.5 — ${label}`;
+    await loadHistory();
+  }
 
+  async function loadHistory() {
+    if (currentSensorIndex == null) return;
     try {
-      const res = await fetch(`${API_BASE}/api/historico/${sensorIndex}`);
+      const res = await fetch(`${API_BASE}/api/historico/${currentSensorIndex}?range=${currentRange}`);
       const data = await res.json();
-      renderChart(data.reverse());
+      currentRows = data; // ya vienen en orden cronológico ascendente
+      renderChart(currentRows);
     } catch (err) {
       console.error(err);
     }
@@ -372,33 +510,84 @@
     const ctx = document.getElementById("history-chart");
     const labels = rows.map((r) => formatBsAsTime(r.timestamp));
     const values = rows.map((r) => r.pm2_5);
+    const showChannels = document.getElementById("toggle-channels").checked;
+
+    const datasets = [{
+      label: "PM2.5 promedio (µg/m³)",
+      data: values,
+      borderColor: "#6ee7b7",
+      backgroundColor: "rgba(110,231,183,0.08)",
+      borderWidth: 2,
+      pointRadius: 0,
+      tension: 0.3,
+      fill: true,
+    }];
+
+    if (showChannels) {
+      datasets.push(
+        {
+          label: "Canal A",
+          data: rows.map((r) => r.pm2_5_a),
+          borderColor: "rgba(110,231,183,0.5)",
+          borderWidth: 1,
+          borderDash: [4, 3],
+          pointRadius: 0,
+          fill: false,
+        },
+        {
+          label: "Canal B",
+          data: rows.map((r) => r.pm2_5_b),
+          borderColor: "rgba(240,163,93,0.6)",
+          borderWidth: 1,
+          borderDash: [4, 3],
+          pointRadius: 0,
+          fill: false,
+        }
+      );
+    }
 
     if (chart) chart.destroy();
     chart = new Chart(ctx, {
       type: "line",
-      data: {
-        labels,
-        datasets: [{
-          label: "PM2.5 (µg/m³)",
-          data: values,
-          borderColor: "#6ee7b7",
-          backgroundColor: "rgba(110,231,183,0.08)",
-          borderWidth: 2,
-          pointRadius: 0,
-          tension: 0.3,
-          fill: true,
-        }],
-      },
+      data: { labels, datasets },
+      plugins: [aqiBandsPlugin],
       options: {
         responsive: true,
-        plugins: { legend: { display: false } },
+        plugins: { legend: { display: showChannels, labels: { color: "#8b93a3", font: { family: "JetBrains Mono", size: 10 } } } },
         scales: {
-          x: { ticks: { color: "#8b93a3", font: { family: "JetBrains Mono", size: 10 } }, grid: { color: "#232936" } },
+          x: { ticks: { color: "#8b93a3", font: { family: "JetBrains Mono", size: 10 }, maxTicksLimit: 12 }, grid: { color: "#232936" } },
           y: { ticks: { color: "#8b93a3", font: { family: "JetBrains Mono", size: 10 } }, grid: { color: "#232936" } },
         },
       },
     });
   }
+
+  function exportCsv() {
+    if (!currentRows.length) return;
+    const headers = ["timestamp_utc", "pm1_0", "pm2_5", "pm2_5_a", "pm2_5_b", "pm10_0", "temperatura_c", "humedad", "presion", "rssi"];
+    const lines = [headers.join(",")];
+    currentRows.forEach((r) => {
+      lines.push(headers.map((h) => r[h.replace("_utc", "").replace("_c", "")] ?? "").join(","));
+    });
+    const blob = new Blob([lines.join("\n")], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${currentLabel.replace(/\s+/g, "_")}_${currentRange}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  document.getElementById("export-btn").addEventListener("click", exportCsv);
+  document.getElementById("toggle-channels").addEventListener("change", () => renderChart(currentRows));
+  document.querySelectorAll(".range-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".range-btn").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      currentRange = btn.dataset.range;
+      loadHistory();
+    });
+  });
 
   loadSensors();
   setInterval(loadSensors, 5 * 60 * 1000); // refresca cada 5 min

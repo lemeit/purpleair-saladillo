@@ -52,13 +52,18 @@ export default {
       const historicoMatch = path.match(/^\/api\/historico\/(\d+)$/);
       if (historicoMatch) {
         const sensorIndex = historicoMatch[1];
+        const range = url.searchParams.get("range") || "24h";
+        const rangeMap = { "24h": "-24 hours", "7d": "-7 days", "30d": "-30 days" };
+        const modifier = rangeMap[range] || rangeMap["24h"];
+
         const { results } = await env.DB.prepare(
           `SELECT * FROM lecturas
            WHERE sensor_index = ?
-           ORDER BY timestamp DESC
-           LIMIT 200`
+             AND timestamp >= datetime('now', ?)
+           ORDER BY timestamp ASC
+           LIMIT 3000`
         )
-          .bind(sensorIndex)
+          .bind(sensorIndex, modifier)
           .all();
         return json(results);
       }

@@ -20,7 +20,7 @@ CF_ACCOUNT_ID = os.environ["CF_ACCOUNT_ID"]
 CF_DATABASE_ID = os.environ["CF_DATABASE_ID"]
 CF_API_TOKEN = os.environ["CF_API_TOKEN"]
 
-FIELDS = "name,latitude,longitude,pm1.0,pm2.5,pm2.5_10minute,pm2.5_60minute,pm10.0,temperature,humidity,pressure,rssi,last_seen"
+FIELDS = "name,latitude,longitude,pm1.0,pm2.5,pm2.5_10minute,pm2.5_60minute,pm10.0,pm2.5_a,pm2.5_b,temperature,humidity,pressure,rssi,last_seen"
 
 D1_URL = f"https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/d1/database/{CF_DATABASE_ID}/query"
 
@@ -76,8 +76,8 @@ def insert_lectura(row, field_index):
     sql = """
         INSERT INTO lecturas (
             sensor_index, timestamp, pm1_0, pm2_5, pm2_5_10min,
-            pm2_5_60min, pm10_0, temperatura, humedad, presion, rssi
-        ) VALUES (?, datetime(?, 'unixepoch'), ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            pm2_5_60min, pm10_0, pm2_5_a, pm2_5_b, temperatura, humedad, presion, rssi
+        ) VALUES (?, datetime(?, 'unixepoch'), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """
     params = [
         sensor_index,
@@ -87,6 +87,8 @@ def insert_lectura(row, field_index):
         row[field_index["pm2.5_10minute"]],
         row[field_index["pm2.5_60minute"]],
         row[field_index["pm10.0"]],
+        row[field_index["pm2.5_a"]],
+        row[field_index["pm2.5_b"]],
         fahrenheit_to_celsius(row[field_index["temperature"]]),
         row[field_index["humidity"]],
         row[field_index["pressure"]],
