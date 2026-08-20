@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Aire Saladillo · Calidad de aire en instituciones educativas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Sora:wght@300;400;600;700&display=swap" rel="stylesheet" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0b0e13;
+    --bg-panel: #12161e;
+    --bg-panel-hover: #171c26;
+    --border: #232936;
+    --text: #e6e9ef;
+    --text-dim: #8b93a3;
+    --accent: #6ee7b7;
+    --accent-dim: #2f4a41;
+    --good: #6ee7b7;
+    --moderate: #f5d565;
+    --unhealthy-sg: #f0a35d;
+    --unhealthy: #ef7b7b;
+    --font-display: "JetBrains Mono", monospace;
+    --font-body: "Sora", sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    min-height: 100vh;
+    line-height: 1.5;
+  }
+
+  header {
+    padding: 48px 32px 32px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .eyebrow {
+    font-family: var(--font-display);
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 12px;
+  }
+
+  h1 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: clamp(28px, 4vw, 42px);
+    letter-spacing: -0.01em;
+  }
+
+  header p {
+    color: var(--text-dim);
+    margin-top: 10px;
+    max-width: 560px;
+    font-size: 15px;
+  }
+
+  main {
+    padding: 32px;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  .status-bar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    font-family: var(--font-display);
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-bottom: 24px;
+  }
+
+  .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 16px;
+    margin-bottom: 40px;
+  }
+
+  .card {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+
+  .card:hover {
+    background: var(--bg-panel-hover);
+    border-color: var(--accent-dim);
+  }
+
+  .card.selected {
+    border-color: var(--accent);
+  }
+
+  .card-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 16px;
+  }
+
+  .card-name {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 14px;
+  }
+
+  .card-sub {
+    color: var(--text-dim);
+    font-size: 12px;
+    margin-top: 4px;
+  }
+
+  .badge {
+    font-family: var(--font-display);
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+
+  .aqi-value {
+    font-family: var(--font-display);
+    font-size: 36px;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .aqi-label {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 6px;
+  }
+
+  .metrics-row {
+    display: flex;
+    gap: 16px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+
+  .metric {
+    font-size: 12px;
+  }
+
+  .metric-value {
+    font-family: var(--font-display);
+    font-size: 14px;
+    color: var(--text);
+  }
+
+  .metric-label {
+    color: var(--text-dim);
+    margin-top: 2px;
+  }
+
+  .panel {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 24px;
+  }
+
+  .panel-title {
+    font-family: var(--font-display);
+    font-size: 14px;
+    color: var(--text-dim);
+    margin-bottom: 20px;
+  }
+
+  .empty-state {
+    text-align: center;
+    color: var(--text-dim);
+    padding: 60px 20px;
+    font-size: 14px;
+  }
+
+  footer {
+    text-align: center;
+    padding: 32px;
+    color: var(--text-dim);
+    font-size: 12px;
+    font-family: var(--font-display);
+  }
+
+  footer a { color: var(--accent); text-decoration: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="eyebrow">lemeit.ar / aire</div>
+  <h1>Calidad de aire — Saladillo</h1>
+  <p>Red de sensores PurpleAir instalados en escuelas y jardines de infantes de la ciudad, monitoreando material particulado en tiempo real.</p>
+</header>
+
+<main>
+  <div class="status-bar">
+    <span class="dot"></span>
+    <span id="status-text">Cargando datos...</span>
+  </div>
+
+  <div class="grid" id="sensor-grid"></div>
+
+  <div class="panel">
+    <div class="panel-title" id="chart-title">Seleccioná una institución para ver el histórico</div>
+    <canvas id="history-chart" height="90"></canvas>
+  </div>
+</main>
+
+<footer>
+  Proyecto lemeit.ar · datos de <a href="https://www.purpleair.com" target="_blank">PurpleAir</a>
+</footer>
+
+<script>
+  // Reemplazar por la URL real una vez desplegado el Worker
+  // (ej: https://purpleair-saladillo-api.TU-SUBDOMINIO.workers.dev)
+  const API_BASE = "https://purpleair-saladillo-api.fisicai-eureka-01.workers.dev";
+
+  let chart = null;
+
+  function aqiInfo(aqi) {
+    if (aqi == null) return { label: "Sin dato", color: "var(--text-dim)", bg: "transparent" };
+    if (aqi <= 50) return { label: "Buena", color: "var(--good)", bg: "rgba(110,231,183,0.12)" };
+    if (aqi <= 100) return { label: "Moderada", color: "var(--moderate)", bg: "rgba(245,213,101,0.12)" };
+    if (aqi <= 150) return { label: "Grupos sensibles", color: "var(--unhealthy-sg)", bg: "rgba(240,163,93,0.12)" };
+    return { label: "No saludable", color: "var(--unhealthy)", bg: "rgba(239,123,123,0.12)" };
+  }
+
+  function pm25ToAqi(pm) {
+    // Aproximación EPA simplificada por tramos
+    if (pm == null) return null;
+    const breakpoints = [
+      [0, 12, 0, 50], [12.1, 35.4, 51, 100], [35.5, 55.4, 101, 150],
+      [55.5, 150.4, 151, 200], [150.5, 250.4, 201, 300],
+    ];
+    for (const [cLo, cHi, iLo, iHi] of breakpoints) {
+      if (pm >= cLo && pm <= cHi) {
+        return Math.round(((iHi - iLo) / (cHi - cLo)) * (pm - cLo) + iLo);
+      }
+    }
+    return 300;
+  }
+
+  async function loadSensors() {
+    try {
+      const res = await fetch(`${API_BASE}/api/ultimas`);
+      const data = await res.json();
+      renderGrid(data);
+      document.getElementById("status-text").textContent =
+        `${data.length} sensor${data.length === 1 ? "" : "es"} activo${data.length === 1 ? "" : "s"} · actualizado cada 15 min`;
+    } catch (err) {
+      document.getElementById("status-text").textContent = "No se pudo conectar con la API";
+      console.error(err);
+    }
+  }
+
+  function renderGrid(sensors) {
+    const grid = document.getElementById("sensor-grid");
+    grid.innerHTML = "";
+
+    if (!sensors.length) {
+      grid.innerHTML = `<div class="empty-state">Todavía no hay lecturas guardadas.</div>`;
+      return;
+    }
+
+    sensors.forEach((s) => {
+      const aqi = pm25ToAqi(s.pm2_5);
+      const info = aqiInfo(aqi);
+
+      const card = document.createElement("div");
+      card.className = "card";
+      card.dataset.sensorIndex = s.sensor_index;
+      card.innerHTML = `
+        <div class="card-top">
+          <div>
+            <div class="card-name">${s.institucion || s.nombre}</div>
+            <div class="card-sub">${s.nombre}</div>
+          </div>
+          <span class="badge" style="color:${info.color}; background:${info.bg}">${info.label}</span>
+        </div>
+        <div class="aqi-value" style="color:${info.color}">${aqi ?? "—"}</div>
+        <div class="aqi-label">Índice de calidad de aire (AQI)</div>
+        <div class="metrics-row">
+          <div class="metric">
+            <div class="metric-value">${s.pm2_5 ?? "—"} µg/m³</div>
+            <div class="metric-label">PM2.5</div>
+          </div>
+          <div class="metric">
+            <div class="metric-value">${s.temperatura ?? "—"}°C</div>
+            <div class="metric-label">Temp.</div>
+          </div>
+          <div class="metric">
+            <div class="metric-value">${s.humedad ?? "—"}%</div>
+            <div class="metric-label">Humedad</div>
+          </div>
+        </div>
+      `;
+      card.addEventListener("click", () => selectSensor(s.sensor_index, s.institucion || s.nombre, card));
+      grid.appendChild(card);
+    });
+
+    // Selecciona el primero por defecto
+    const first = grid.querySelector(".card");
+    if (first) first.click();
+  }
+
+  async function selectSensor(sensorIndex, label, cardEl) {
+    document.querySelectorAll(".card").forEach((c) => c.classList.remove("selected"));
+    cardEl.classList.add("selected");
+    document.getElementById("chart-title").textContent = `Histórico PM2.5 — ${label}`;
+
+    try {
+      const res = await fetch(`${API_BASE}/api/historico/${sensorIndex}`);
+      const data = await res.json();
+      renderChart(data.reverse());
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  function renderChart(rows) {
+    const ctx = document.getElementById("history-chart");
+    const labels = rows.map((r) =>
+      new Date(r.timestamp).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })
+    );
+    const values = rows.map((r) => r.pm2_5);
+
+    if (chart) chart.destroy();
+    chart = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels,
+        datasets: [{
+          label: "PM2.5 (µg/m³)",
+          data: values,
+          borderColor: "#6ee7b7",
+          backgroundColor: "rgba(110,231,183,0.08)",
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.3,
+          fill: true,
+        }],
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { color: "#8b93a3", font: { family: "JetBrains Mono", size: 10 } }, grid: { color: "#232936" } },
+          y: { ticks: { color: "#8b93a3", font: { family: "JetBrains Mono", size: 10 } }, grid: { color: "#232936" } },
+        },
+      },
+    });
+  }
+
+  loadSensors();
+  setInterval(loadSensors, 5 * 60 * 1000); // refresca cada 5 min
+</script>
+
+</body>
+</html>

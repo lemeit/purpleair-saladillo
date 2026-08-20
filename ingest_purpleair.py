@@ -25,6 +25,12 @@ FIELDS = "name,latitude,longitude,pm1.0,pm2.5,pm2.5_10minute,pm2.5_60minute,pm10
 D1_URL = f"https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/d1/database/{CF_DATABASE_ID}/query"
 
 
+def fahrenheit_to_celsius(temp_f):
+    if temp_f is None:
+        return None
+    return round((temp_f - 32) * 5 / 9, 2)
+
+
 def fetch_purpleair_data():
     url = "https://api.purpleair.com/v1/sensors"
     headers = {"X-API-Key": PURPLEAIR_API_KEY}
@@ -81,7 +87,7 @@ def insert_lectura(row, field_index):
         row[field_index["pm2.5_10minute"]],
         row[field_index["pm2.5_60minute"]],
         row[field_index["pm10.0"]],
-        row[field_index["temperature"]],
+        fahrenheit_to_celsius(row[field_index["temperature"]]),
         row[field_index["humidity"]],
         row[field_index["pressure"]],
         row[field_index["rssi"]],
