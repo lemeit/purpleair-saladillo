@@ -1,0 +1,8 @@
+name = "purpleair-saladillo-api"
+main = "src/index.js"
+compatibility_date = "2026-08-19"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "purpleair-saladillo"
+database_id = "9ced8d5e-e3ae-4718-a553-21e349368e1c"
