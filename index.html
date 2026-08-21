@@ -7,6 +7,14 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Sora:wght@300;400;600;700&display=swap" rel="stylesheet" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+  // Aplicar el tema ANTES de pintar la página para evitar flash de color equivocado.
+  (function () {
+    var saved = localStorage.getItem("theme");
+    var theme = saved || (window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+    document.documentElement.setAttribute("data-theme", theme);
+  })();
+</script>
 <style>
   :root {
     --bg: #0b0e13;
@@ -25,6 +33,21 @@
     --font-body: "Sora", sans-serif;
   }
 
+  :root[data-theme="light"] {
+    --bg: #f7f6f2;
+    --bg-panel: #ffffff;
+    --bg-panel-hover: #f0efe9;
+    --border: #e0ddd3;
+    --text: #1c1d1f;
+    --text-dim: #6b6a66;
+    --accent: #0f8a5f;
+    --accent-dim: #d7f0e3;
+    --good: #0f8a5f;
+    --moderate: #a6720a;
+    --unhealthy-sg: #b5591a;
+    --unhealthy: #b23a3a;
+  }
+
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
   body {
@@ -33,6 +56,7 @@
     font-family: var(--font-body);
     min-height: 100vh;
     line-height: 1.5;
+    transition: background 0.15s, color 0.15s;
   }
 
   header {
@@ -281,14 +305,47 @@
   }
 
   footer a { color: var(--accent); text-decoration: none; }
+
+  .header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .theme-toggle {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 16px;
+    color: var(--text);
+    transition: border-color 0.15s, background 0.15s;
+  }
+
+  .theme-toggle:hover {
+    background: var(--bg-panel-hover);
+    border-color: var(--accent-dim);
+  }
 </style>
 </head>
 <body>
 
 <header>
-  <div class="eyebrow">lemeit.ar / aire</div>
-  <h1>Calidad de aire — Saladillo</h1>
-  <p>Red de sensores PurpleAir instalados en escuelas y jardines de infantes de la ciudad, monitoreando material particulado en tiempo real.</p>
+  <div class="header-row">
+    <div>
+      <div class="eyebrow">lemeit.ar / aire</div>
+      <h1>Calidad de aire — Saladillo</h1>
+      <p>Red de sensores PurpleAir instalados en escuelas y jardines de infantes de la ciudad, monitoreando material particulado en tiempo real.</p>
+    </div>
+    <button class="theme-toggle" id="theme-toggle" aria-label="Cambiar tema claro/oscuro" title="Cambiar tema claro/oscuro"></button>
+  </div>
 </header>
 
 <main>
@@ -511,6 +568,9 @@
     const labels = rows.map((r) => formatBsAsTime(r.timestamp));
     const values = rows.map((r) => r.pm2_5);
     const showChannels = document.getElementById("toggle-channels").checked;
+    const cs = getComputedStyle(document.documentElement);
+    const colorDim = cs.getPropertyValue("--text-dim").trim();
+    const colorBorder = cs.getPropertyValue("--border").trim();
 
     const datasets = [{
       label: "PM2.5 promedio (µg/m³)",
@@ -553,10 +613,10 @@
       plugins: [aqiBandsPlugin],
       options: {
         responsive: true,
-        plugins: { legend: { display: showChannels, labels: { color: "#8b93a3", font: { family: "JetBrains Mono", size: 10 } } } },
+        plugins: { legend: { display: showChannels, labels: { color: colorDim, font: { family: "JetBrains Mono", size: 10 } } } },
         scales: {
-          x: { ticks: { color: "#8b93a3", font: { family: "JetBrains Mono", size: 10 }, maxTicksLimit: 12 }, grid: { color: "#232936" } },
-          y: { ticks: { color: "#8b93a3", font: { family: "JetBrains Mono", size: 10 } }, grid: { color: "#232936" } },
+          x: { ticks: { color: colorDim, font: { family: "JetBrains Mono", size: 10 }, maxTicksLimit: 12 }, grid: { color: colorBorder } },
+          y: { ticks: { color: colorDim, font: { family: "JetBrains Mono", size: 10 } }, grid: { color: colorBorder } },
         },
       },
     });
@@ -589,6 +649,21 @@
     });
   });
 
+  function updateThemeToggleIcon() {
+    const theme = document.documentElement.getAttribute("data-theme");
+    document.getElementById("theme-toggle").textContent = theme === "light" ? "☀️" : "🌙";
+  }
+
+  document.getElementById("theme-toggle").addEventListener("click", () => {
+    const current = document.documentElement.getAttribute("data-theme");
+    const next = current === "light" ? "dark" : "light";
+    document.documentElement.setAttribute("data-theme", next);
+    localStorage.setItem("theme", next);
+    updateThemeToggleIcon();
+    if (currentRows.length) renderChart(currentRows);
+  });
+
+  updateThemeToggleIcon();
   loadSensors();
   setInterval(loadSensors, 5 * 60 * 1000); // refresca cada 5 min
 </script>
