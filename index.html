@@ -373,10 +373,24 @@
       <label><input type="checkbox" id="toggle-channels" /> Mostrar canales A/B por separado</label>
     </div>
   </div>
+
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-title" style="margin-bottom:12px">Acerca de este proyecto</div>
+    <p style="font-size:13px;color:var(--text-dim);line-height:1.6">
+      Red de sensores <a href="https://www.purpleair.com" target="_blank" style="color:var(--accent)">PurpleAir</a> instalada en escuelas y jardines de infantes de Saladillo, que mide material particulado (PM2.5/PM10) en tiempo real como parte de una iniciativa de monitoreo y educación ambiental.
+    </p>
+    <p style="font-size:13px;color:var(--text-dim);line-height:1.6;margin-top:10px">
+      Arquitectura: un script en Python consulta la API de PurpleAir cada 15 minutos (GitHub Actions) y guarda los datos en Cloudflare D1; un Worker expone una API REST propia que consume este dashboard, publicado en Cloudflare Pages.
+      Es uno de tres proyectos ambientales hermanos: <a href="https://emas.lemeit.ar" target="_blank" style="color:var(--accent)">emas.lemeit.ar</a> (meteorología), este (calidad del aire) y wq.lemeit.ar (calidad del agua, en desarrollo).
+    </p>
+    <p style="font-size:12px;color:var(--text-dim);line-height:1.6;margin-top:10px">
+      Ing. Luciano Lamaita — docente de Física y Química en Saladillo, Buenos Aires — más proyectos en <a href="https://profe.lemeit.ar" target="_blank" style="color:var(--accent)">profe.lemeit.ar</a>
+    </p>
+  </div>
 </main>
 
 <footer>
-  Proyecto lemeit.ar · datos de <a href="https://www.purpleair.com" target="_blank">PurpleAir</a>
+  Proyecto <a href="https://profe.lemeit.ar" target="_blank">lemeit.ar</a> · datos de <a href="https://www.purpleair.com" target="_blank">PurpleAir</a>
 </footer>
 
 <script>
