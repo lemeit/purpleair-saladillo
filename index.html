@@ -5,8 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Aire Saladillo · Calidad de aire en instituciones educativas</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Sora:wght@300;400;600;700&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://design.lemeit.ar/lemeit-theme.css">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://design.lemeit.ar/lemeit-common.js"></script>
 <script>
   // Aplicar el tema ANTES de pintar la página para evitar flash de color equivocado.
   (function () {
@@ -17,35 +19,37 @@
 </script>
 <style>
   :root {
-    --bg: #0b0e13;
-    --bg-panel: #12161e;
-    --bg-panel-hover: #171c26;
-    --border: #232936;
-    --text: #e6e9ef;
-    --text-dim: #8b93a3;
-    --accent: #6ee7b7;
-    --accent-dim: #2f4a41;
-    --good: #6ee7b7;
-    --moderate: #f5d565;
-    --unhealthy-sg: #f0a35d;
-    --unhealthy: #ef7b7b;
-    --font-display: "JetBrains Mono", monospace;
-    --font-body: "Sora", sans-serif;
+    /* paleta lemeit.ar (design.lemeit.ar) — modo oscuro */
+    --bg: #1A1612;
+    --bg-panel: #221E18;
+    --bg-panel-hover: #2B241D;
+    --border: #3D3028;
+    --text: #F2ECE4;
+    --text-dim: #C9BEB2;
+    --accent: #D9691F;
+    --accent-dim: #3D2A1A;
+    --good: #8FB56B;
+    --moderate: #D9A441;
+    --unhealthy-sg: #D9691F;
+    --unhealthy: #D9736F;
+    --font-display: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+    --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
   }
 
   :root[data-theme="light"] {
-    --bg: #f7f6f2;
+    /* paleta lemeit.ar (design.lemeit.ar) — modo claro */
+    --bg: #FAF7F2;
     --bg-panel: #ffffff;
-    --bg-panel-hover: #f0efe9;
-    --border: #e0ddd3;
-    --text: #1c1d1f;
-    --text-dim: #6b6a66;
-    --accent: #0f8a5f;
-    --accent-dim: #d7f0e3;
-    --good: #0f8a5f;
-    --moderate: #a6720a;
-    --unhealthy-sg: #b5591a;
-    --unhealthy: #b23a3a;
+    --bg-panel-hover: #F0EBE2;
+    --border: #E0D9CC;
+    --text: #2A211A;
+    --text-dim: #6B5C4E;
+    --accent: #9B3D00;
+    --accent-dim: #F0DDCC;
+    --good: #4C7A3D;
+    --moderate: #A6720A;
+    --unhealthy-sg: #9B3D00;
+    --unhealthy: #A33131;
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -344,7 +348,13 @@
       <h1>Calidad de aire — Saladillo</h1>
       <p>Red de sensores PurpleAir instalados en escuelas y jardines de infantes de la ciudad, monitoreando material particulado en tiempo real.</p>
     </div>
-    <button class="theme-toggle" id="theme-toggle" aria-label="Cambiar tema claro/oscuro" title="Cambiar tema claro/oscuro"></button>
+    <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+      <div class="lm-switcher" id="lm-switcher">
+        <button class="lm-switcher-btn">Portales ⌄</button>
+        <div class="lm-switcher-menu"></div>
+      </div>
+      <button class="theme-toggle" id="theme-toggle" aria-label="Cambiar tema claro/oscuro" title="Cambiar tema claro/oscuro"></button>
+    </div>
   </div>
 </header>
 
@@ -405,10 +415,10 @@
   let currentRows = [];
 
   const AQI_BANDS = [
-    { from: 0, to: 50, color: "rgba(110,231,183,0.10)" },
-    { from: 50, to: 100, color: "rgba(245,213,101,0.08)" },
-    { from: 100, to: 150, color: "rgba(240,163,93,0.08)" },
-    { from: 150, to: 300, color: "rgba(239,123,123,0.08)" },
+    { from: 0, to: 50, color: "rgba(143,181,107,0.10)" },
+    { from: 50, to: 100, color: "rgba(217,164,65,0.08)" },
+    { from: 100, to: 150, color: "rgba(217,105,31,0.08)" },
+    { from: 150, to: 300, color: "rgba(217,115,111,0.08)" },
   ];
 
   const aqiBandsPlugin = {
@@ -469,10 +479,10 @@
 
   function aqiInfo(aqi) {
     if (aqi == null) return { label: "Sin dato", color: "var(--text-dim)", bg: "transparent" };
-    if (aqi <= 50) return { label: "Buena", color: "var(--good)", bg: "rgba(110,231,183,0.12)" };
-    if (aqi <= 100) return { label: "Moderada", color: "var(--moderate)", bg: "rgba(245,213,101,0.12)" };
-    if (aqi <= 150) return { label: "Grupos sensibles", color: "var(--unhealthy-sg)", bg: "rgba(240,163,93,0.12)" };
-    return { label: "No saludable", color: "var(--unhealthy)", bg: "rgba(239,123,123,0.12)" };
+    if (aqi <= 50) return { label: "Buena", color: "var(--good)", bg: "rgba(143,181,107,0.12)" };
+    if (aqi <= 100) return { label: "Moderada", color: "var(--moderate)", bg: "rgba(217,164,65,0.12)" };
+    if (aqi <= 150) return { label: "Grupos sensibles", color: "var(--unhealthy-sg)", bg: "rgba(217,105,31,0.12)" };
+    return { label: "No saludable", color: "var(--unhealthy)", bg: "rgba(217,115,111,0.12)" };
   }
 
   function pm25ToAqi(pm) {
@@ -585,12 +595,13 @@
     const cs = getComputedStyle(document.documentElement);
     const colorDim = cs.getPropertyValue("--text-dim").trim();
     const colorBorder = cs.getPropertyValue("--border").trim();
+    const colorAccent = cs.getPropertyValue("--accent").trim();
 
     const datasets = [{
       label: "PM2.5 promedio (µg/m³)",
       data: values,
-      borderColor: "#6ee7b7",
-      backgroundColor: "rgba(110,231,183,0.08)",
+      borderColor: colorAccent,
+      backgroundColor: "rgba(217,105,31,0.08)",
       borderWidth: 2,
       pointRadius: 0,
       tension: 0.3,
@@ -602,7 +613,7 @@
         {
           label: "Canal A",
           data: rows.map((r) => r.pm2_5_a),
-          borderColor: "rgba(110,231,183,0.5)",
+          borderColor: "rgba(217,105,31,0.5)",
           borderWidth: 1,
           borderDash: [4, 3],
           pointRadius: 0,
@@ -611,7 +622,7 @@
         {
           label: "Canal B",
           data: rows.map((r) => r.pm2_5_b),
-          borderColor: "rgba(240,163,93,0.6)",
+          borderColor: "rgba(217,164,65,0.6)",
           borderWidth: 1,
           borderDash: [4, 3],
           pointRadius: 0,
@@ -678,6 +689,7 @@
   });
 
   updateThemeToggleIcon();
+  if (window.LemeitCommon) LemeitCommon.initSwitcher("aq");
   loadSensors();
   setInterval(loadSensors, 5 * 60 * 1000); // refresca cada 5 min
 </script>
