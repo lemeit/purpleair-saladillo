@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="https://design.lemeit.ar/lemeit-theme.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://design.lemeit.ar/lemeit-common.js"></script>
 <script>
@@ -169,24 +170,83 @@
     margin-bottom: 20px;
   }
 
+  /* ── CARD FLIP (frente = resumen, dorso = mini-gráfico) ── */
   .card {
+    cursor: pointer;
+    perspective: 1200px;
+    min-height: 230px;
+  }
+
+  .card-inner {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 230px;
+    transition: transform .5s;
+    transform-style: preserve-3d;
+  }
+
+  .card.flipped .card-inner { transform: rotateY(180deg); }
+
+  .card-face {
+    position: absolute;
+    inset: 0;
+    backface-visibility: hidden;
     background: var(--bg-panel);
     border: 1px solid var(--border);
     border-radius: 10px;
     padding: 14px;
-    cursor: pointer;
-    transition: border-color .2s, background .15s, transform .15s, box-shadow .2s;
+    transition: border-color .2s, background .15s, box-shadow .2s;
+    display: flex;
+    flex-direction: column;
   }
 
-  .card:hover {
+  .card:hover .card-face {
     background: var(--bg-panel-hover);
     border-color: var(--accent);
-    transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(0,0,0,.1);
   }
 
-  .card.selected {
-    border-color: var(--accent);
+  .card.selected .card-face { border-color: var(--accent); }
+
+  .card-back {
+    transform: rotateY(180deg);
+    justify-content: flex-start;
+  }
+
+  .card-back-hdr {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .card-back-title {
+    font-family: var(--font-body);
+    font-weight: 500;
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .card-back-close {
+    flex-shrink: 0;
+    font-family: var(--font-display);
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+
+  .card-back-chart { position: relative; flex: 1; min-height: 0; }
+
+  .card-flip-hint {
+    font-family: var(--font-display);
+    font-size: 9px;
+    color: var(--text-dim);
+    text-align: center;
+    margin-top: 8px;
+    opacity: .6;
   }
 
   .card-top {
@@ -253,6 +313,17 @@
     font-family: var(--font-display);
     color: var(--text-dim);
     margin-top: 2px;
+  }
+
+  /* ── MINI CARDS (mapa), mismo formato que las de EMA ── */
+  .card-lbl { font-size: 10px; text-transform: uppercase; letter-spacing: .09em; color: var(--text-dim); margin-bottom: 6px; }
+  .card-val { font-family: var(--font-display); font-size: 22px; font-weight: 700; line-height: 1; }
+  .card-unit { font-family: var(--font-display); font-size: 10px; color: var(--text-dim); margin-left: 2px; }
+
+  /* ── MAPA ── */
+  #mapa-container { height: 400px; width: 100%; }
+  @media (max-width: 640px) {
+    #mapa-container { height: 280px; }
   }
 
   .panel {
@@ -412,6 +483,7 @@
   <button class="nav-btn active" onclick="showTab('actuales',this)">Actuales</button>
   <button class="nav-btn" onclick="showTab('historial',this)">Historial</button>
   <button class="nav-btn" onclick="showTab('grafico',this)">Gráfico</button>
+  <button class="nav-btn" onclick="showTab('mapa',this)">Mapa</button>
   <button class="nav-btn" onclick="showTab('acerca',this)">Acerca de</button>
 </div>
 
@@ -457,6 +529,14 @@
     </div>
   </div>
 
+  <!-- MAPA -->
+  <div class="section" id="tab-mapa">
+    <div class="chart-wrap" style="padding:0;overflow:hidden">
+      <div id="mapa-container"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-top:12px" id="mapa-cards"></div>
+  </div>
+
   <div class="section" id="tab-acerca">
     <div class="panel">
       <div class="panel-title">Acerca de este proyecto</div>
@@ -489,6 +569,9 @@
   let currentLabel = "";
   let currentRange = "24h";
   let currentRows = [];
+  let latestSensors = [];
+  let mapaInst = null;
+  let mapaTileLayer = null;
 
   const AQI_BANDS = [
     { from: 0, to: 50, color: "rgba(143,181,107,0.10)" },
@@ -576,12 +659,88 @@
     return 300;
   }
 
+  /* ── MAPA ── */
+  async function cargarMapa() {
+    const dark = document.documentElement.getAttribute("data-theme") !== "light";
+    const tileUrl = dark
+      ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+      : "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png";
+
+    const conCoords = latestSensors.filter((s) => s.latitud != null && s.longitud != null);
+    const centro = conCoords.length
+      ? [conCoords.reduce((a, s) => a + s.latitud, 0) / conCoords.length, conCoords.reduce((a, s) => a + s.longitud, 0) / conCoords.length]
+      : [-35.628, -59.797];
+
+    if (!mapaInst) {
+      mapaInst = L.map("mapa-container").setView(centro, 13);
+      mapaTileLayer = L.tileLayer(tileUrl, { attribution: "© OpenStreetMap · CartoDB" }).addTo(mapaInst);
+    } else {
+      if (mapaTileLayer) mapaInst.removeLayer(mapaTileLayer);
+      mapaTileLayer = L.tileLayer(tileUrl, { attribution: "© OpenStreetMap · CartoDB" }).addTo(mapaInst);
+    }
+
+    mapaInst.eachLayer((l) => { if (l instanceof L.CircleMarker || l instanceof L.Marker) mapaInst.removeLayer(l); });
+    if (mapaTileLayer) mapaTileLayer.addTo(mapaInst); // por si el tileLayer cayó dentro del removeLayer de arriba
+
+    const cs = getComputedStyle(document.documentElement);
+    const labelBg = dark ? "rgba(26,22,18,0.8)" : "rgba(255,255,255,0.85)";
+
+    const mapaCards = document.getElementById("mapa-cards");
+    if (!conCoords.length) {
+      mapaCards.innerHTML = '<div class="loader">Ningún sensor con coordenadas cargadas todavía.</div>';
+      return;
+    }
+
+    conCoords.forEach((s) => {
+      const aqi = pm25ToAqi(s.pm2_5);
+      const info = aqiInfo(aqi);
+      const color = cs.getPropertyValue(info.color.replace("var(", "").replace(")", "")).trim() || info.color;
+      const nombre = s.institucion || s.nombre;
+
+      L.circleMarker([s.latitud, s.longitud], {
+        radius: 14, fillColor: color, color: "#fff", weight: 2, opacity: 1, fillOpacity: 0.85,
+      })
+        .addTo(mapaInst)
+        .bindPopup(`
+          <strong style="font-family:monospace">${nombre}</strong><br>
+          PM2.5: ${s.pm2_5 ?? "—"} µg/m³ · AQI ${aqi ?? "—"} (${info.label})<br>
+          <small style="color:#888">${formatBsAsFull(s.timestamp)}</small>
+        `);
+
+      L.marker([s.latitud, s.longitud], {
+        icon: L.divIcon({
+          html: `<div style="font-family:monospace;font-size:11px;font-weight:700;color:${color};
+                 background:${labelBg};padding:1px 4px;border-radius:3px;
+                 white-space:nowrap;margin-top:-28px;margin-left:18px">
+                 AQI ${aqi ?? "—"}</div>`,
+          iconSize: [60, 20], iconAnchor: [0, 0], className: "",
+        }),
+      }).addTo(mapaInst);
+    });
+
+    mapaCards.innerHTML = conCoords.map((s) => {
+      const aqi = pm25ToAqi(s.pm2_5);
+      const info = aqiInfo(aqi);
+      const color = cs.getPropertyValue(info.color.replace("var(", "").replace(")", "")).trim() || info.color;
+      return `
+      <div class="card" style="cursor:pointer" onclick="mapaInst.setView([${s.latitud},${s.longitud}],16)">
+        <div class="card-lbl">${s.institucion || s.nombre}</div>
+        <div><span class="card-val" style="color:${color}">${aqi ?? "—"}</span><span class="card-unit">AQI</span></div>
+        <div class="card-sub">${s.pm2_5 ?? "—"} µg/m³ PM2.5 · ${formatBsAsFull(s.timestamp)}</div>
+      </div>`;
+    }).join("");
+
+    setTimeout(() => mapaInst.invalidateSize(), 100);
+  }
+
   async function loadSensors() {
     const dot = document.getElementById("dot");
     try {
       const res = await fetch(`${API_BASE}/api/ultimas`);
       const data = await res.json();
+      latestSensors = data;
       renderGrid(data);
+      if (document.getElementById("tab-mapa").classList.contains("active")) cargarMapa();
       document.getElementById("status-text").textContent =
         `${data.length} sensor${data.length === 1 ? "" : "es"} activo${data.length === 1 ? "" : "s"} · actualizado cada 15 min`;
       if (dot) { dot.classList.add("ok"); dot.classList.remove("error"); }
@@ -601,58 +760,127 @@
       return;
     }
 
-    sensors.forEach((s) => {
+    sensors.forEach((s, i) => {
       const aqi = pm25ToAqi(s.pm2_5);
       const info = aqiInfo(aqi);
+      // Si "institución" todavía no está cargada (columna nueva, ver README),
+      // institución y nombre son el mismo valor — no repetirlo dos veces.
+      const nombreDispositivo = (s.institucion && s.institucion !== s.nombre) ? s.nombre : `Sensor #${s.sensor_index}`;
 
       const card = document.createElement("div");
       card.className = "card";
       card.dataset.sensorIndex = s.sensor_index;
       card.innerHTML = `
-        <div class="card-top">
-          <div>
-            <div class="card-name">${s.institucion || s.nombre}</div>
-            <div class="card-sub">${s.nombre}</div>
+        <div class="card-inner">
+          <div class="card-face card-front">
+            <div class="card-top">
+              <div>
+                <div class="card-name">${s.institucion || s.nombre}</div>
+                <div class="card-sub">${nombreDispositivo}</div>
+              </div>
+              <span class="badge" style="color:${info.color}; background:${info.bg}">${info.label}</span>
+            </div>
+            <div class="aqi-value" style="color:${info.color}">${aqi ?? "—"}</div>
+            <div class="aqi-label">Índice de calidad de aire (AQI)</div>
+            <div class="metrics-row">
+              <div class="metric">
+                <div class="metric-value">${s.pm2_5 ?? "—"} µg/m³</div>
+                <div class="metric-label">PM2.5</div>
+              </div>
+              <div class="metric">
+                <div class="metric-value">${s.temperatura ?? "—"}°C</div>
+                <div class="metric-label">Temp.</div>
+              </div>
+              <div class="metric">
+                <div class="metric-value">${s.humedad ?? "—"}%</div>
+                <div class="metric-label">Humedad</div>
+              </div>
+            </div>
+            <div class="card-sub" style="margin-top:12px; padding-top:12px; border-top:1px solid var(--border);">
+              Actualizado ${formatBsAsFull(s.timestamp)} (ARG)
+            </div>
+            <div class="card-flip-hint">toca para ver el gráfico ⟳</div>
           </div>
-          <span class="badge" style="color:${info.color}; background:${info.bg}">${info.label}</span>
-        </div>
-        <div class="aqi-value" style="color:${info.color}">${aqi ?? "—"}</div>
-        <div class="aqi-label">Índice de calidad de aire (AQI)</div>
-        <div class="metrics-row">
-          <div class="metric">
-            <div class="metric-value">${s.pm2_5 ?? "—"} µg/m³</div>
-            <div class="metric-label">PM2.5</div>
+          <div class="card-face card-back">
+            <div class="card-back-hdr">
+              <div class="card-back-title">${s.institucion || s.nombre} · PM2.5 24h</div>
+              <div class="card-back-close">✕ volver</div>
+            </div>
+            <div class="card-back-chart"><canvas id="mini-chart-${s.sensor_index}"></canvas></div>
           </div>
-          <div class="metric">
-            <div class="metric-value">${s.temperatura ?? "—"}°C</div>
-            <div class="metric-label">Temp.</div>
-          </div>
-          <div class="metric">
-            <div class="metric-value">${s.humedad ?? "—"}%</div>
-            <div class="metric-label">Humedad</div>
-          </div>
-        </div>
-        <div class="card-sub" style="margin-top:12px; padding-top:12px; border-top:1px solid var(--border);">
-          Actualizado ${formatBsAsFull(s.timestamp)} (ARG)
         </div>
       `;
-      card.addEventListener("click", () => selectSensor(s.sensor_index, s.institucion || s.nombre, card));
+      card.addEventListener("click", () => selectSensor(s.sensor_index, s.institucion || s.nombre, card, true));
       grid.appendChild(card);
     });
 
-    // Selecciona el primero por defecto
+    // Selecciona el primero por defecto para Historial/Gráfico, pero SIN dar
+    // vuelta la card — en "Actuales" debe verse el frente (datos actuales)
+    // de todos los sensores hasta que el usuario toque uno.
     const first = grid.querySelector(".card");
-    if (first) first.click();
+    if (first && sensors[0]) {
+      selectSensor(sensors[0].sensor_index, sensors[0].institucion || sensors[0].nombre, first, false);
+    }
   }
 
-  async function selectSensor(sensorIndex, label, cardEl) {
-    document.querySelectorAll(".card").forEach((c) => c.classList.remove("selected"));
+  let miniChart = null;
+
+  async function selectSensor(sensorIndex, label, cardEl, flip = true) {
+    const yaEstaba = cardEl.classList.contains("selected");
+    document.querySelectorAll(".card").forEach((c) => {
+      if (c !== cardEl) c.classList.remove("selected", "flipped");
+    });
     cardEl.classList.add("selected");
     currentSensorIndex = sensorIndex;
     currentLabel = label;
     document.getElementById("hist-titulo").textContent = `Registros recientes — ${label}`;
     document.getElementById("graf-titulo").textContent = `Histórico PM2.5 — ${label}`;
     await Promise.all([loadHistory(), loadHistorialTable()]);
+
+    if (!flip) return; // selección automática al cargar la grilla — no dar vuelta la card
+
+    // Dar vuelta la card (como una carpa) para mostrar el mini-gráfico atrás,
+    // salvo que ya estuviera seleccionada — en ese caso el click la cierra.
+    if (yaEstaba) {
+      cardEl.classList.toggle("flipped");
+    } else {
+      cardEl.classList.add("flipped");
+    }
+    if (cardEl.classList.contains("flipped")) renderMiniChart(sensorIndex);
+  }
+
+  function renderMiniChart(sensorIndex) {
+    const canvas = document.getElementById(`mini-chart-${sensorIndex}`);
+    if (!canvas || !currentRows.length) return;
+    const labels = currentRows.map((r) => formatBsAsTime(r.timestamp));
+    const values = currentRows.map((r) => r.pm2_5);
+    const cs = getComputedStyle(document.documentElement);
+    const colorAccent = cs.getPropertyValue("--accent").trim();
+
+    if (miniChart) miniChart.destroy();
+    miniChart = new Chart(canvas, {
+      type: "line",
+      data: {
+        labels,
+        datasets: [{
+          data: values, borderColor: colorAccent, backgroundColor: "rgba(217,105,31,0.12)",
+          borderWidth: 1.5, pointRadius: 0, tension: 0.3, fill: true,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: "index", intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            backgroundColor: cs.getPropertyValue("--bg-panel").trim(),
+            titleFont: { family: "JetBrains Mono", size: 9 }, bodyFont: { family: "JetBrains Mono", size: 10 },
+          },
+        },
+        scales: { x: { display: false }, y: { display: false } },
+      },
+    });
   }
 
   async function loadHistory() {
@@ -791,6 +1019,7 @@
     document.documentElement.setAttribute("data-theme", next);
     localStorage.setItem("theme", next);
     if (currentRows.length) renderChart(currentRows);
+    if (mapaInst && document.getElementById("tab-mapa").classList.contains("active")) cargarMapa();
   });
 
   /* ── TABS ── */
@@ -799,12 +1028,14 @@
     document.getElementById("tab-" + id).classList.add("active");
     document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
     if (btn) btn.classList.add("active");
+    if (id === "mapa") cargarMapa();
   }
 
   if (window.LemeitCommon) LemeitCommon.initSwitcher("aq");
   loadSensors();
   setInterval(loadSensors, 5 * 60 * 1000); // refresca cada 5 min
 </script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 
 </body>
 </html>
