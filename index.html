@@ -174,14 +174,14 @@
   .card {
     cursor: pointer;
     perspective: 1200px;
-    min-height: 230px;
+    min-height: 360px;
   }
 
   .card-inner {
     position: relative;
     width: 100%;
     height: 100%;
-    min-height: 230px;
+    min-height: 360px;
     transition: transform .5s;
     transform-style: preserve-3d;
   }
@@ -277,9 +277,26 @@
     white-space: nowrap;
   }
 
-  .aqi-value {
+  .aqi-gauge {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    margin: 2px 0 -8px;
+  }
+
+  .aqi-gauge-svg {
+    width: 148px;
+    height: auto;
+    display: block;
+  }
+
+  .aqi-gauge-value {
+    position: absolute;
+    bottom: 4px;
+    left: 50%;
+    transform: translateX(-50%);
     font-family: var(--font-display);
-    font-size: 22px;
+    font-size: 26px;
     font-weight: 700;
     line-height: 1;
   }
@@ -289,6 +306,7 @@
     font-family: var(--font-display);
     color: var(--text-dim);
     margin-top: 5px;
+    text-align: center;
   }
 
   .metrics-row {
@@ -326,6 +344,21 @@
   @media (max-width: 640px) {
     #mapa-container { height: 280px; }
   }
+
+  .mapa-legend {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding: 10px 14px 12px; font-family: var(--font-display); font-size: 10px; color: var(--text-dim);
+  }
+  .mapa-legend-item { display: inline-flex; align-items: center; white-space: nowrap; }
+  .mapa-legend-swatch {
+    display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+    margin-right: 4px; vertical-align: middle;
+  }
+  .mapa-legend-gradient {
+    flex: 0 1 120px; height: 8px; border-radius: 4px;
+    background: linear-gradient(90deg, rgb(143,181,107), rgb(217,164,65), rgb(217,115,111));
+  }
+  .mapa-legend-note { color: var(--text-dim); opacity: .75; }
 
   .panel {
     background: var(--bg-panel);
@@ -533,7 +566,19 @@
   <!-- MAPA -->
   <div class="section" id="tab-mapa">
     <div class="chart-wrap" style="padding:0;overflow:hidden">
+      <div class="chart-hdr" style="padding:12px 14px 0">
+        <h2>Mapa de sensores</h2>
+        <select class="sel" id="sel-mapa-param" onchange="cargarMapa()">
+          <option value="aqi">Capa: AQI</option>
+          <option value="pm2_5">Capa: PM2.5</option>
+          <option value="temperatura">Capa: Temperatura</option>
+          <option value="humedad">Capa: Humedad</option>
+          <option value="presion">Capa: Presión</option>
+          <option value="voc">Capa: VOC</option>
+        </select>
+      </div>
       <div id="mapa-container"></div>
+      <div class="mapa-legend" id="mapa-legend"></div>
     </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-top:12px" id="mapa-cards"></div>
   </div>
@@ -637,6 +682,58 @@
     });
   }
 
+  // ── GAUGE (velocímetro) de AQI ──
+  // Bandas de igual ancho angular (45° c/u) para que se lean fácil, como un
+  // velocímetro de auto — la aguja interpola dentro de la banda según el
+  // valor real, pero los límites de color quedan parejos visualmente.
+  const AQI_GAUGE_BANDS = [
+    { min: 0, max: 50, angleStart: 180, colorVar: "--good" },
+    { min: 50, max: 100, angleStart: 135, colorVar: "--moderate" },
+    { min: 100, max: 150, angleStart: 90, colorVar: "--unhealthy-sg" },
+    { min: 150, max: 300, angleStart: 45, colorVar: "--unhealthy" },
+  ];
+
+  function polarToCartesian(cx, cy, r, angleDeg) {
+    const rad = (angleDeg * Math.PI) / 180;
+    return { x: cx + r * Math.cos(rad), y: cy - r * Math.sin(rad) };
+  }
+
+  function gaugeArcPath(cx, cy, r, angleStart, angleEnd) {
+    const start = polarToCartesian(cx, cy, r, angleStart);
+    const end = polarToCartesian(cx, cy, r, angleEnd);
+    return `M ${start.x.toFixed(2)} ${start.y.toFixed(2)} A ${r} ${r} 0 0 1 ${end.x.toFixed(2)} ${end.y.toFixed(2)}`;
+  }
+
+  function aqiGaugeNeedleAngle(aqi) {
+    if (aqi == null) return 180; // sin dato: aguja al mínimo
+    const v = Math.max(0, Math.min(300, aqi));
+    for (const b of AQI_GAUGE_BANDS) {
+      if (v <= b.max) {
+        const frac = (v - b.min) / (b.max - b.min);
+        return b.angleStart - frac * 45;
+      }
+    }
+    return 0;
+  }
+
+  function aqiGaugeSvg(aqi) {
+    const cx = 100, cy = 92, r = 78, sw = 14;
+    const cs = getComputedStyle(document.documentElement);
+    const bands = AQI_GAUGE_BANDS.map((b) => {
+      const color = cs.getPropertyValue(b.colorVar).trim();
+      return `<path d="${gaugeArcPath(cx, cy, r, b.angleStart, b.angleStart - 45)}" stroke="${color}" stroke-width="${sw}" fill="none" stroke-linecap="butt"/>`;
+    }).join("");
+    const needleAngle = aqiGaugeNeedleAngle(aqi);
+    const tip = polarToCartesian(cx, cy, r - sw / 2 - 5, needleAngle);
+    const needleColor = cs.getPropertyValue("--text").trim();
+    return `
+      <svg class="aqi-gauge-svg" viewBox="0 0 200 105" aria-hidden="true">
+        ${bands}
+        <line x1="${cx}" y1="${cy}" x2="${tip.x.toFixed(2)}" y2="${tip.y.toFixed(2)}" stroke="${needleColor}" stroke-width="3" stroke-linecap="round"/>
+        <circle cx="${cx}" cy="${cy}" r="5" fill="${needleColor}"/>
+      </svg>`;
+  }
+
   function aqiInfo(aqi) {
     if (aqi == null) return { label: "Sin dato", color: "var(--text-dim)", bg: "transparent" };
     if (aqi <= 50) return { label: "Buena", color: "var(--good)", bg: "rgba(143,181,107,0.12)" };
@@ -661,6 +758,89 @@
   }
 
   /* ── MAPA ── */
+  // Capas de datos seleccionables en el mapa, al estilo "Data Layer" del
+  // mapa de PurpleAir (map.purpleair.com): AQI/PM2.5 usan las bandas fijas
+  // de aqiInfo(); el resto usa una escala relativa a los sensores visibles
+  // en este momento (no son estándares de salud, se aclara en la leyenda).
+  const MAPA_PARAMS = {
+    aqi: { label: "AQI", unit: "", get: (s) => pm25ToAqi(s.pm2_5) },
+    pm2_5: { label: "PM2.5", unit: "µg/m³", get: (s) => s.pm2_5 },
+    temperatura: { label: "Temperatura", unit: "°C", get: (s) => s.temperatura },
+    humedad: { label: "Humedad", unit: "%", get: (s) => s.humedad },
+    presion: { label: "Presión", unit: "hPa", get: (s) => s.presion },
+    voc: { label: "VOC", unit: "", get: (s) => s.voc },
+  };
+
+  function interpolateColorRel(t) {
+    t = Math.max(0, Math.min(1, t));
+    const stops = [[0, [143, 181, 107]], [0.5, [217, 164, 65]], [1, [217, 115, 111]]];
+    let lo = stops[0], hi = stops[stops.length - 1];
+    for (let i = 0; i < stops.length - 1; i++) {
+      if (t >= stops[i][0] && t <= stops[i + 1][0]) { lo = stops[i]; hi = stops[i + 1]; break; }
+    }
+    const span = hi[0] - lo[0] || 1;
+    const localT = (t - lo[0]) / span;
+    const rgb = lo[1].map((c, i) => Math.round(c + (hi[1][i] - c) * localT));
+    return `rgb(${rgb.join(",")})`;
+  }
+
+  function computeMapaDomain(conCoords, param) {
+    if (param === "aqi" || param === "pm2_5") return null; // usa bandas fijas de aqiInfo
+    const vals = conCoords.map((s) => MAPA_PARAMS[param].get(s)).filter((v) => v != null);
+    if (!vals.length) return null;
+    return { min: Math.min(...vals), max: Math.max(...vals) };
+  }
+
+  function colorForParam(s, param, domain, cs) {
+    if (param === "aqi" || param === "pm2_5") {
+      const info = aqiInfo(pm25ToAqi(s.pm2_5));
+      return cs.getPropertyValue(info.color.replace("var(", "").replace(")", "")).trim() || info.color;
+    }
+    const val = MAPA_PARAMS[param].get(s);
+    if (val == null || !domain || domain.min === domain.max) return cs.getPropertyValue("--text-dim").trim();
+    return interpolateColorRel((val - domain.min) / (domain.max - domain.min));
+  }
+
+  function formatParamValue(s, param) {
+    const def = MAPA_PARAMS[param];
+    const val = def.get(s);
+    if (val == null) return "—";
+    if (param === "aqi") return `AQI ${val}`;
+    return `${val}${def.unit ? " " + def.unit : ""}`;
+  }
+
+  function renderMapaLegend(param, domain) {
+    const legend = document.getElementById("mapa-legend");
+    if (!legend) return;
+    const def = MAPA_PARAMS[param];
+    if (param === "aqi" || param === "pm2_5") {
+      legend.innerHTML = `
+        <span class="mapa-legend-item"><span class="mapa-legend-swatch" style="background:var(--good)"></span>Buena</span>
+        <span class="mapa-legend-item"><span class="mapa-legend-swatch" style="background:var(--moderate)"></span>Moderada</span>
+        <span class="mapa-legend-item"><span class="mapa-legend-swatch" style="background:var(--unhealthy-sg)"></span>Grupos sensibles</span>
+        <span class="mapa-legend-item"><span class="mapa-legend-swatch" style="background:var(--unhealthy)"></span>No saludable</span>`;
+      return;
+    }
+    if (!domain) {
+      legend.innerHTML = `<span class="mapa-legend-item">Sin datos de ${def.label.toLowerCase()} para mostrar escala.</span>`;
+      return;
+    }
+    legend.innerHTML = `
+      <span class="mapa-legend-item">${domain.min}${def.unit ? " " + def.unit : ""}</span>
+      <span class="mapa-legend-gradient"></span>
+      <span class="mapa-legend-item">${domain.max}${def.unit ? " " + def.unit : ""}</span>
+      <span class="mapa-legend-note">(escala relativa a los sensores actuales, no es un estándar de calidad)</span>`;
+  }
+
+  // Da vuelta (o cierra) la card del sensor dentro de #mapa-cards — reusa
+  // exactamente la misma lógica/estado que las cards de "Actuales".
+  function flipMapaCard(sensorIndex, label) {
+    const cardEl = document.querySelector(`#mapa-cards .card[data-sensor-index="${sensorIndex}"]`);
+    if (!cardEl) return;
+    cardEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    selectSensor(sensorIndex, label, cardEl, true, "mapa-");
+  }
+
   async function cargarMapa() {
     const dark = document.documentElement.getAttribute("data-theme") !== "light";
     const tileUrl = dark
@@ -687,16 +867,31 @@
     const labelBg = dark ? "rgba(26,22,18,0.8)" : "rgba(255,255,255,0.85)";
 
     const mapaCards = document.getElementById("mapa-cards");
+
+    // La opción "VOC" del selector solo tiene sentido si algún sensor visible
+    // la reporta (PurpleAir Flex/Zen/Touch) — se oculta si no, sin borrar la
+    // selección si el usuario ya la tenía elegida.
+    const selParam = document.getElementById("sel-mapa-param");
+    const vocOption = selParam.querySelector('option[value="voc"]');
+    const hayVoc = latestSensors.some((s) => s.voc != null);
+    if (vocOption) vocOption.style.display = hayVoc ? "" : "none";
+    if (!hayVoc && selParam.value === "voc") selParam.value = "aqi";
+    const param = selParam.value || "aqi";
+
     if (!conCoords.length) {
       mapaCards.innerHTML = '<div class="loader">Ningún sensor con coordenadas cargadas todavía.</div>';
+      renderMapaLegend(param, null);
       return;
     }
 
+    const domain = computeMapaDomain(conCoords, param);
+    renderMapaLegend(param, domain);
+
     conCoords.forEach((s) => {
+      const color = colorForParam(s, param, domain, cs);
+      const nombre = s.institucion || s.nombre;
       const aqi = pm25ToAqi(s.pm2_5);
       const info = aqiInfo(aqi);
-      const color = cs.getPropertyValue(info.color.replace("var(", "").replace(")", "")).trim() || info.color;
-      const nombre = s.institucion || s.nombre;
 
       L.circleMarker([s.latitud, s.longitud], {
         radius: 14, fillColor: color, color: "#fff", weight: 2, opacity: 1, fillOpacity: 0.85,
@@ -706,33 +901,42 @@
           <strong style="font-family:monospace">${nombre}</strong><br>
           PM2.5: ${s.pm2_5 ?? "—"} µg/m³ · AQI ${aqi ?? "—"} (${info.label})<br>
           <small style="color:#888">${formatBsAsFull(s.timestamp)}</small>
-        `);
+        `)
+        .on("click", () => flipMapaCard(s.sensor_index, nombre));
 
       L.marker([s.latitud, s.longitud], {
         icon: L.divIcon({
           html: `<div style="font-family:monospace;font-size:11px;font-weight:700;color:${color};
                  background:${labelBg};padding:1px 4px;border-radius:3px;
-                 white-space:nowrap;margin-top:-28px;margin-left:18px">
-                 AQI ${aqi ?? "—"}</div>`,
+                 white-space:nowrap;margin-top:-28px;margin-left:18px;cursor:pointer">
+                 ${formatParamValue(s, param)}</div>`,
           iconSize: [60, 20], iconAnchor: [0, 0], className: "",
         }),
-      }).addTo(mapaInst);
+      }).addTo(mapaInst).on("click", () => flipMapaCard(s.sensor_index, nombre));
     });
 
     mapaCards.innerHTML = conCoords.map((s) => {
-      const aqi = pm25ToAqi(s.pm2_5);
-      const info = aqiInfo(aqi);
-      const color = cs.getPropertyValue(info.color.replace("var(", "").replace(")", "")).trim() || info.color;
-      return `
-      <div class="card" style="cursor:pointer" onclick="mapaInst.setView([${s.latitud},${s.longitud}],16)">
-        <div class="card-lbl">${s.institucion || s.nombre}</div>
-        <div><span class="card-val" style="color:${color}">${aqi ?? "—"}</span><span class="card-unit">AQI</span></div>
-        <div class="card-sub">${s.pm2_5 ?? "—"} µg/m³ PM2.5 · ${formatBsAsFull(s.timestamp)}</div>
-      </div>`;
+      const card = document.createElement("div");
+      card.className = "card";
+      card.dataset.sensorIndex = s.sensor_index;
+      card.innerHTML = buildSensorCardInner(s, "mapa-");
+      return card.outerHTML;
     }).join("");
 
     setTimeout(() => mapaInst.invalidateSize(), 100);
   }
+
+  // Delegación de eventos: un solo listener en el contenedor (que nunca se
+  // reemplaza, solo su innerHTML) alcanza para todas las cards del mapa,
+  // incluso después de que cargarMapa() las vuelve a dibujar.
+  document.getElementById("mapa-cards").addEventListener("click", (e) => {
+    const cardEl = e.target.closest(".card");
+    if (!cardEl) return;
+    const sensorIndex = Number(cardEl.dataset.sensorIndex);
+    const s = latestSensors.find((x) => x.sensor_index === sensorIndex);
+    if (s && mapaInst && s.latitud != null && s.longitud != null) mapaInst.setView([s.latitud, s.longitud], 16);
+    selectSensor(sensorIndex, (s && (s.institucion || s.nombre)) || "", cardEl, true, "mapa-");
+  });
 
   async function loadSensors() {
     const dot = document.getElementById("dot");
@@ -752,26 +956,16 @@
     }
   }
 
-  function renderGrid(sensors) {
-    const grid = document.getElementById("sensor-grid");
-    grid.innerHTML = "";
-
-    if (!sensors.length) {
-      grid.innerHTML = `<div class="empty-state">Todavía no hay lecturas guardadas.</div>`;
-      return;
-    }
-
-    sensors.forEach((s, i) => {
-      const aqi = pm25ToAqi(s.pm2_5);
-      const info = aqiInfo(aqi);
-      // Si "institución" todavía no está cargada (columna nueva, ver README),
-      // institución y nombre son el mismo valor — no repetirlo dos veces.
-      const nombreDispositivo = (s.institucion && s.institucion !== s.nombre) ? s.nombre : `Sensor #${s.sensor_index}`;
-
-      const card = document.createElement("div");
-      card.className = "card";
-      card.dataset.sensorIndex = s.sensor_index;
-      card.innerHTML = `
+  // Construye el HTML de una card completa (frente + dorso con mini-gráfico).
+  // Se usa tanto en "Actuales" como en las cards de "Mapa" — mismo diseño en
+  // los dos lugares. idPrefix evita colisión de ids de <canvas> entre grillas.
+  function buildSensorCardInner(s, idPrefix) {
+    const aqi = pm25ToAqi(s.pm2_5);
+    const info = aqiInfo(aqi);
+    // Si "institución" todavía no está cargada (columna nueva, ver README),
+    // institución y nombre son el mismo valor — no repetirlo dos veces.
+    const nombreDispositivo = (s.institucion && s.institucion !== s.nombre) ? s.nombre : `Sensor #${s.sensor_index}`;
+    return `
         <div class="card-inner">
           <div class="card-face card-front">
             <div class="card-top">
@@ -781,7 +975,10 @@
               </div>
               <span class="badge" style="color:${info.color}; background:${info.bg}">${info.label}</span>
             </div>
-            <div class="aqi-value" style="color:${info.color}">${aqi ?? "—"}</div>
+            <div class="aqi-gauge">
+              ${aqiGaugeSvg(aqi)}
+              <div class="aqi-gauge-value" style="color:${info.color}">${aqi ?? "—"}</div>
+            </div>
             <div class="aqi-label">Índice de calidad de aire (AQI)</div>
             <div class="metrics-row">
               <div class="metric">
@@ -816,11 +1013,27 @@
               <div class="card-back-title">${s.institucion || s.nombre} · PM2.5 24h</div>
               <div class="card-back-close">✕ volver</div>
             </div>
-            <div class="card-back-chart"><canvas id="mini-chart-${s.sensor_index}"></canvas></div>
+            <div class="card-back-chart"><canvas id="mini-chart-${idPrefix}${s.sensor_index}"></canvas></div>
           </div>
         </div>
       `;
-      card.addEventListener("click", () => selectSensor(s.sensor_index, s.institucion || s.nombre, card, true));
+  }
+
+  function renderGrid(sensors) {
+    const grid = document.getElementById("sensor-grid");
+    grid.innerHTML = "";
+
+    if (!sensors.length) {
+      grid.innerHTML = `<div class="empty-state">Todavía no hay lecturas guardadas.</div>`;
+      return;
+    }
+
+    sensors.forEach((s) => {
+      const card = document.createElement("div");
+      card.className = "card";
+      card.dataset.sensorIndex = s.sensor_index;
+      card.innerHTML = buildSensorCardInner(s, "");
+      card.addEventListener("click", () => selectSensor(s.sensor_index, s.institucion || s.nombre, card, true, ""));
       grid.appendChild(card);
     });
 
@@ -829,13 +1042,13 @@
     // de todos los sensores hasta que el usuario toque uno.
     const first = grid.querySelector(".card");
     if (first && sensors[0]) {
-      selectSensor(sensors[0].sensor_index, sensors[0].institucion || sensors[0].nombre, first, false);
+      selectSensor(sensors[0].sensor_index, sensors[0].institucion || sensors[0].nombre, first, false, "");
     }
   }
 
   let miniChart = null;
 
-  async function selectSensor(sensorIndex, label, cardEl, flip = true) {
+  async function selectSensor(sensorIndex, label, cardEl, flip = true, canvasPrefix = "") {
     const yaEstaba = cardEl.classList.contains("selected");
     document.querySelectorAll(".card").forEach((c) => {
       if (c !== cardEl) c.classList.remove("selected", "flipped");
@@ -856,11 +1069,11 @@
     } else {
       cardEl.classList.add("flipped");
     }
-    if (cardEl.classList.contains("flipped")) renderMiniChart(sensorIndex);
+    if (cardEl.classList.contains("flipped")) renderMiniChart(sensorIndex, canvasPrefix);
   }
 
-  function renderMiniChart(sensorIndex) {
-    const canvas = document.getElementById(`mini-chart-${sensorIndex}`);
+  function renderMiniChart(sensorIndex, canvasPrefix = "") {
+    const canvas = document.getElementById(`mini-chart-${canvasPrefix}${sensorIndex}`);
     if (!canvas || !currentRows.length) return;
     const labels = currentRows.map((r) => formatBsAsTime(r.timestamp));
     const values = currentRows.map((r) => r.pm2_5);
