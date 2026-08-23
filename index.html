@@ -296,27 +296,15 @@
   }
 
   .aqi-gauge {
-    position: relative;
     display: flex;
     justify-content: center;
-    margin: 2px 0 -8px;
+    margin: 2px 0 -6px;
   }
 
   .aqi-gauge-svg {
     width: 148px;
     height: auto;
     display: block;
-  }
-
-  .aqi-gauge-value {
-    position: absolute;
-    bottom: 4px;
-    left: 50%;
-    transform: translateX(-50%);
-    font-family: var(--font-display);
-    font-size: 26px;
-    font-weight: 700;
-    line-height: 1;
   }
 
   .aqi-label {
@@ -462,6 +450,34 @@
     cursor: pointer;
   }
 
+  /* ── Selector multi-parámetro (pestaña Gráfico) ── */
+  .param-toggle {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    margin-bottom: 10px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--font-display);
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+
+  .param-toggle-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+  }
+
+  .param-toggle-swatch {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+
   .empty-state {
     text-align: center;
     color: var(--text-dim);
@@ -470,17 +486,9 @@
     font-size: 12px;
   }
 
-  footer {
-    text-align: center;
-    padding: 24px 20px;
-    color: var(--text-dim);
-    font-size: 10px;
-    font-family: var(--font-display);
-    border-top: 1px solid var(--border);
-    margin-top: 8px;
-  }
-
-  footer a { color: var(--accent); text-decoration: none; }
+  /* Footer: usa la clase compartida .lm-footer de design.lemeit.ar/lemeit-theme.css
+     (mismo componente que emas.lemeit.ar, vía LemeitCommon.renderFooter) — sin
+     estilos propios acá para que ambos portales queden realmente armonizados. */
 
   /* ── THEME TOGGLE — minimalista, igual que profe.lemeit.ar (solo el ícono, sin caja) ── */
   .theme-toggle {
@@ -572,11 +580,12 @@
         </select>
         <button class="export-btn" id="export-btn">Exportar CSV</button>
       </div>
+      <div class="param-toggle" id="param-toggle"></div>
       <div class="chart-canvas-wrap">
         <canvas id="history-chart" style="position:absolute;top:0;left:0;width:100%;height:100%"></canvas>
       </div>
       <div class="channel-toggle">
-        <label><input type="checkbox" id="toggle-channels" /> Mostrar canales A/B por separado</label>
+        <label><input type="checkbox" id="toggle-channels" /> Mostrar canales A/B por separado (solo PM2.5)</label>
       </div>
     </div>
   </div>
@@ -619,9 +628,7 @@
 
 </main>
 
-<footer>
-  Proyecto <a href="https://profe.lemeit.ar" target="_blank">lemeit.ar</a> · datos de <a href="https://www.purpleair.com" target="_blank">PurpleAir</a>
-</footer>
+<footer class="lm-footer" id="lm-footer"></footer>
 
 <script>
   // Reemplazar por la URL real una vez desplegado el Worker
@@ -637,6 +644,47 @@
   let mapaInst = null;
   let mapaTileLayer = null;
 
+  // ── Selector multi-parámetro (pestaña Gráfico) ──
+  // Cada parámetro tiene su propia escala Y (yAxisID) para poder superponer,
+  // por ej., PM2.5 con Temperatura sin que una aplaste la otra al compartir
+  // un solo eje con unidades incompatibles (µg/m³ vs °C vs % vs hPa).
+  const CHART_PARAM_DEFS = {
+    pm2_5: { label: "PM2.5", unit: "µg/m³", color: "#D9691F" },
+    pm1_0: { label: "PM1.0", unit: "µg/m³", color: "#D9A441" },
+    pm10_0: { label: "PM10", unit: "µg/m³", color: "#8FB56B" },
+    temperatura: { label: "Temp.", unit: "°C", color: "#5B8DEF" },
+    humedad: { label: "Humedad", unit: "%", color: "#4FB0C6" },
+    presion: { label: "Presión", unit: "hPa", color: "#A88FD9" },
+    voc: { label: "VOC", unit: "", color: "#D9736F" },
+  };
+  const CHART_PARAM_ORDER = ["pm2_5", "pm1_0", "pm10_0", "temperatura", "humedad", "presion", "voc"];
+
+  function buildParamToggle() {
+    const box = document.getElementById("param-toggle");
+    if (!box) return;
+    box.innerHTML = CHART_PARAM_ORDER.map((key) => {
+      const def = CHART_PARAM_DEFS[key];
+      const checked = key === "pm2_5" ? "checked" : "";
+      // VOC arranca oculto: recién se muestra si el sensor seleccionado lo
+      // reporta (ver loadHistory(), igual criterio que en la tarjeta y el mapa).
+      const hidden = key === "voc" ? ' style="display:none"' : "";
+      return `<label class="param-toggle-item" data-param="${key}"${hidden}>
+        <input type="checkbox" class="chart-param-cb" value="${key}" ${checked}>
+        <span class="param-toggle-swatch" style="background:${def.color}"></span>${def.label}
+      </label>`;
+    }).join("");
+    box.addEventListener("change", (e) => {
+      if (e.target.classList.contains("chart-param-cb")) renderChart(currentRows);
+    });
+  }
+
+  function getSelectedChartParams() {
+    const checked = Array.from(document.querySelectorAll(".chart-param-cb"))
+      .filter((cb) => cb.checked)
+      .map((cb) => cb.value);
+    return checked.length ? checked : ["pm2_5"]; // nunca un gráfico vacío
+  }
+
   const AQI_BANDS = [
     { from: 0, to: 50, color: "rgba(143,181,107,0.10)" },
     { from: 50, to: 100, color: "rgba(217,164,65,0.08)" },
@@ -649,7 +697,11 @@
     beforeDraw(c) {
       const { ctx, chartArea, scales } = c;
       if (!chartArea) return;
-      const yScale = scales.y;
+      // Las bandas de fondo son específicas de PM2.5: si ese parámetro no
+      // está entre los seleccionados, su eje "y_pm2_5" no existe y no se
+      // dibuja nada (evita bandas mal ubicadas sobre otras escalas).
+      const yScale = scales.y_pm2_5;
+      if (!yScale) return;
       ctx.save();
       AQI_BANDS.forEach((band) => {
         const yFrom = yScale.getPixelForValue(pm25FromAqi(band.to));
@@ -734,21 +786,28 @@
     return 0;
   }
 
-  function aqiGaugeSvg(aqi) {
-    const cx = 100, cy = 92, r = 78, sw = 14;
+  function aqiGaugeSvg(aqi, valueColor) {
+    // cy queda bien por encima del borde inferior del viewBox (130 vs 78) a
+    // propósito: dentro de ese semicírculo la aguja nunca baja de y=cy, así
+    // que el número — dibujado bien abajo, en y=118 — nunca puede quedar
+    // tapado por la aguja ni por el pivote, sea cual sea el valor de AQI.
+    const cx = 100, cy = 78, r = 70, sw = 14;
     const cs = getComputedStyle(document.documentElement);
     const bands = AQI_GAUGE_BANDS.map((b) => {
       const color = cs.getPropertyValue(b.colorVar).trim();
       return `<path d="${gaugeArcPath(cx, cy, r, b.angleStart, b.angleStart - 45)}" stroke="${color}" stroke-width="${sw}" fill="none" stroke-linecap="butt"/>`;
     }).join("");
     const needleAngle = aqiGaugeNeedleAngle(aqi);
-    const tip = polarToCartesian(cx, cy, r - sw / 2 - 5, needleAngle);
-    const needleColor = cs.getPropertyValue("--text").trim();
+    const tip = polarToCartesian(cx, cy, r - sw / 2 - 8, needleAngle);
+    const needleColor = cs.getPropertyValue("--text-dim").trim();
+    const valueText = aqi != null ? aqi : "—";
+    const color = valueColor || cs.getPropertyValue("--text").trim();
     return `
-      <svg class="aqi-gauge-svg" viewBox="0 0 200 105" aria-hidden="true">
+      <svg class="aqi-gauge-svg" viewBox="0 0 200 130" aria-hidden="true">
         ${bands}
         <line x1="${cx}" y1="${cy}" x2="${tip.x.toFixed(2)}" y2="${tip.y.toFixed(2)}" stroke="${needleColor}" stroke-width="3" stroke-linecap="round"/>
-        <circle cx="${cx}" cy="${cy}" r="5" fill="${needleColor}"/>
+        <circle cx="${cx}" cy="${cy}" r="4" fill="${needleColor}"/>
+        <text x="${cx}" y="120" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-size="30" font-weight="700" fill="${color}">${valueText}</text>
       </svg>`;
   }
 
@@ -995,8 +1054,7 @@
               <span class="badge" style="color:${info.color}; background:${info.bg}">${info.label}</span>
             </div>
             <div class="aqi-gauge">
-              ${aqiGaugeSvg(aqi)}
-              <div class="aqi-gauge-value" style="color:${info.color}">${aqi ?? "—"}</div>
+              ${aqiGaugeSvg(aqi, info.color)}
             </div>
             <div class="aqi-label">Índice de calidad de aire (AQI)</div>
             <div class="metrics-row">
@@ -1081,7 +1139,7 @@
     currentSensorIndex = sensorIndex;
     currentLabel = label;
     document.getElementById("hist-titulo").textContent = `Registros recientes — ${label}`;
-    document.getElementById("graf-titulo").textContent = `Histórico PM2.5 — ${label}`;
+    document.getElementById("graf-titulo").textContent = `Histórico — ${label}`;
     await Promise.all([loadHistory(), loadHistorialTable()]);
 
     if (!flip) return; // selección automática al cargar la grilla — no dar vuelta la card
@@ -1149,6 +1207,18 @@
       const res = await fetch(`${API_BASE}/api/historico/${currentSensorIndex}?range=${currentRange}`);
       const data = await res.json();
       currentRows = data; // ya vienen en orden cronológico ascendente
+
+      // El checkbox de VOC solo tiene sentido si el sensor seleccionado lo
+      // reporta (PurpleAir Flex/Zen/Touch) — se oculta y se destilda si no,
+      // mismo criterio que en la tarjeta y en el selector de capa del mapa.
+      const vocItem = document.querySelector('#param-toggle [data-param="voc"]');
+      if (vocItem) {
+        const hasVoc = currentRows.some((r) => r.voc != null);
+        vocItem.style.display = hasVoc ? "" : "none";
+        const vocCb = vocItem.querySelector("input");
+        if (!hasVoc && vocCb.checked) vocCb.checked = false;
+      }
+
       renderChart(currentRows);
     } catch (err) {
       console.error(err);
@@ -1191,25 +1261,52 @@
   function renderChart(rows) {
     const ctx = document.getElementById("history-chart");
     const labels = rows.map((r) => formatBsAsTime(r.timestamp));
-    const values = rows.map((r) => r.pm2_5);
     const showChannels = document.getElementById("toggle-channels").checked;
     const cs = getComputedStyle(document.documentElement);
     const colorDim = cs.getPropertyValue("--text-dim").trim();
     const colorBorder = cs.getPropertyValue("--border").trim();
-    const colorAccent = cs.getPropertyValue("--accent").trim();
 
-    const datasets = [{
-      label: "PM2.5 promedio (µg/m³)",
-      data: values,
-      borderColor: colorAccent,
-      backgroundColor: "rgba(217,105,31,0.08)",
-      borderWidth: 2,
-      pointRadius: 0,
-      tension: 0.3,
-      fill: true,
-    }];
+    const selectedParams = getSelectedChartParams();
+    // Con un solo parámetro (y sin canales) mantenemos el área rellena de
+    // siempre; con más de uno superpuesto, el relleno se apaga para que las
+    // líneas no se tapen entre sí.
+    const soloUnParam = selectedParams.length === 1 && !(showChannels && selectedParams.includes("pm2_5"));
 
-    if (showChannels) {
+    const datasets = [];
+    const scales = {
+      x: { ticks: { color: colorDim, font: { family: "JetBrains Mono", size: 10 }, maxTicksLimit: 12 }, grid: { color: colorBorder } },
+    };
+
+    selectedParams.forEach((param, i) => {
+      const def = CHART_PARAM_DEFS[param];
+      const axisId = `y_${param}`;
+      datasets.push({
+        label: def.unit ? `${def.label} (${def.unit})` : def.label,
+        data: rows.map((r) => r[param]),
+        borderColor: def.color,
+        backgroundColor: def.color + "14", // ~8% de opacidad (hex RGBA de 8 dígitos)
+        borderWidth: 2,
+        pointRadius: 0,
+        tension: 0.3,
+        fill: soloUnParam && i === 0,
+        yAxisID: axisId,
+      });
+      scales[axisId] = {
+        position: i % 2 === 0 ? "left" : "right",
+        ticks: { color: def.color, font: { family: "JetBrains Mono", size: 10 } },
+        grid: { color: colorBorder, drawOnChartArea: i === 0 }, // solo la 1er escala dibuja cuadrícula, para no saturar
+        title: {
+          display: true,
+          text: def.unit ? `${def.label} (${def.unit})` : def.label,
+          color: def.color,
+          font: { family: "JetBrains Mono", size: 10 },
+        },
+      };
+    });
+
+    // Los canales A/B del sensor solo existen para PM2.5 — se agregan como
+    // datasets extra sobre la misma escala "y_pm2_5" cuando corresponde.
+    if (showChannels && selectedParams.includes("pm2_5")) {
       datasets.push(
         {
           label: "Canal A",
@@ -1219,6 +1316,7 @@
           borderDash: [4, 3],
           pointRadius: 0,
           fill: false,
+          yAxisID: "y_pm2_5",
         },
         {
           label: "Canal B",
@@ -1228,6 +1326,7 @@
           borderDash: [4, 3],
           pointRadius: 0,
           fill: false,
+          yAxisID: "y_pm2_5",
         }
       );
     }
@@ -1242,17 +1341,14 @@
         maintainAspectRatio: false,
         interaction: { mode: "index", intersect: false },
         plugins: {
-          legend: { display: showChannels, labels: { color: colorDim, font: { family: "JetBrains Mono", size: 10 } } },
+          legend: { display: datasets.length > 1, labels: { color: colorDim, font: { family: "JetBrains Mono", size: 10 } } },
           tooltip: {
             backgroundColor: cs.getPropertyValue("--bg-panel").trim(), borderColor: colorBorder,
             borderWidth: 1, titleColor: colorDim, bodyColor: cs.getPropertyValue("--text").trim(),
             titleFont: { family: "JetBrains Mono", size: 10 }, bodyFont: { family: "JetBrains Mono", size: 12 },
           },
         },
-        scales: {
-          x: { ticks: { color: colorDim, font: { family: "JetBrains Mono", size: 10 }, maxTicksLimit: 12 }, grid: { color: colorBorder } },
-          y: { ticks: { color: colorDim, font: { family: "JetBrains Mono", size: 10 } }, grid: { color: colorBorder } },
-        },
+        scales,
       },
     });
   }
@@ -1295,7 +1391,13 @@
     if (id === "mapa") cargarMapa();
   }
 
-  if (window.LemeitCommon) LemeitCommon.initSwitcher("aq");
+  if (window.LemeitCommon) {
+    LemeitCommon.initSwitcher("aq");
+    LemeitCommon.renderFooter(document.getElementById("lm-footer"), {
+      extra: 'datos de <a href="https://www.purpleair.com" target="_blank">PurpleAir</a>',
+    });
+  }
+  buildParamToggle();
   loadSensors();
   setInterval(loadSensors, 5 * 60 * 1000); // refresca cada 5 min
 </script>
