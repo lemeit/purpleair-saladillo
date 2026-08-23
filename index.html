@@ -293,7 +293,8 @@
 
   .metrics-row {
     display: flex;
-    gap: 14px;
+    flex-wrap: wrap;
+    gap: 10px 14px;
     margin-top: 12px;
     padding-top: 12px;
     border-top: 1px solid var(--border);
@@ -795,6 +796,15 @@
                 <div class="metric-value">${s.humedad ?? "—"}%</div>
                 <div class="metric-label">Humedad</div>
               </div>
+              <div class="metric">
+                <div class="metric-value">${s.presion ?? "—"} hPa</div>
+                <div class="metric-label">Presión</div>
+              </div>
+              ${s.voc != null ? `
+              <div class="metric">
+                <div class="metric-value">${s.voc}</div>
+                <div class="metric-label">VOC</div>
+              </div>` : ""}
             </div>
             <div class="card-sub" style="margin-top:12px; padding-top:12px; border-top:1px solid var(--border);">
               Actualizado ${formatBsAsFull(s.timestamp)} (ARG)
@@ -856,6 +866,8 @@
     const values = currentRows.map((r) => r.pm2_5);
     const cs = getComputedStyle(document.documentElement);
     const colorAccent = cs.getPropertyValue("--accent").trim();
+    const colorDim = cs.getPropertyValue("--text-dim").trim();
+    const colorBorder = cs.getPropertyValue("--border").trim();
 
     if (miniChart) miniChart.destroy();
     miniChart = new Chart(canvas, {
@@ -878,7 +890,16 @@
             titleFont: { family: "JetBrains Mono", size: 9 }, bodyFont: { family: "JetBrains Mono", size: 10 },
           },
         },
-        scales: { x: { display: false }, y: { display: false } },
+        scales: {
+          x: {
+            ticks: { color: colorDim, font: { family: "JetBrains Mono", size: 8 }, maxTicksLimit: 4, maxRotation: 0 },
+            grid: { color: colorBorder, drawTicks: false },
+          },
+          y: {
+            ticks: { color: colorDim, font: { family: "JetBrains Mono", size: 8 }, maxTicksLimit: 4 },
+            grid: { color: colorBorder, drawTicks: false },
+          },
+        },
       },
     });
   }
@@ -907,15 +928,20 @@
         document.getElementById("tabla-wrap").innerHTML = '<div class="loader">Sin datos.</div>';
         return;
       }
+      // VOC solo lo reportan algunos sensores (PurpleAir Flex/Zen/Touch) —
+      // mostramos esa columna únicamente si hay al menos un dato en el rango.
+      const hasVoc = rows.some((r) => r.voc != null);
       const filas = rows.slice().reverse().map((r) => `<tr>
           <td class="muted">${formatBsAsFull(r.timestamp)}</td>
           <td class="num">${r.pm2_5 ?? "—"}</td>
           <td>${r.temperatura ?? "—"}</td>
           <td>${r.humedad ?? "—"}</td>
+          <td>${r.presion ?? "—"}</td>
+          ${hasVoc ? `<td>${r.voc ?? "—"}</td>` : ""}
         </tr>`).join("");
       document.getElementById("tabla-wrap").innerHTML = `
         <table>
-          <thead><tr><th>Fecha / hora</th><th>PM2.5 (µg/m³)</th><th>Temp. (°C)</th><th>Humedad (%)</th></tr></thead>
+          <thead><tr><th>Fecha / hora</th><th>PM2.5 (µg/m³)</th><th>Temp. (°C)</th><th>Humedad (%)</th><th>Presión (hPa)</th>${hasVoc ? "<th>VOC</th>" : ""}</tr></thead>
           <tbody>${filas}</tbody>
         </table>`;
     } catch (e) {
@@ -995,7 +1021,7 @@
 
   function exportCsv() {
     if (!currentRows.length) return;
-    const headers = ["timestamp_utc", "pm1_0", "pm2_5", "pm2_5_a", "pm2_5_b", "pm10_0", "temperatura_c", "humedad", "presion", "rssi"];
+    const headers = ["timestamp_utc", "pm1_0", "pm2_5", "pm2_5_a", "pm2_5_b", "pm10_0", "temperatura_c", "humedad", "presion", "voc", "rssi"];
     const lines = [headers.join(",")];
     currentRows.forEach((r) => {
       lines.push(headers.map((h) => r[h.replace("_utc", "").replace("_c", "")] ?? "").join(","));
