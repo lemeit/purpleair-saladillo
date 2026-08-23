@@ -174,14 +174,13 @@
   .card {
     cursor: pointer;
     perspective: 1200px;
-    min-height: 360px;
+    min-height: 280px;
   }
 
   .card-inner {
     position: relative;
     width: 100%;
-    height: 100%;
-    min-height: 360px;
+    min-height: 280px;
     transition: transform .5s;
     transform-style: preserve-3d;
   }
@@ -189,8 +188,6 @@
   .card.flipped .card-inner { transform: rotateY(180deg); }
 
   .card-face {
-    position: absolute;
-    inset: 0;
     backface-visibility: hidden;
     background: var(--bg-panel);
     border: 1px solid var(--border);
@@ -201,6 +198,22 @@
     flex-direction: column;
   }
 
+  /* El frente queda en el flujo normal: así el alto de la card lo define
+     el contenido real (nombres largos, VOC opcional, etc.) en vez de un
+     numero fijo que se queda corto o deja hueco de mas. El dorso se
+     superpone (position:absolute) y toma automaticamente esa misma altura. */
+  .card-front {
+    position: relative;
+    min-height: 280px;
+  }
+
+  .card-back {
+    position: absolute;
+    inset: 0;
+    transform: rotateY(180deg);
+    justify-content: flex-start;
+  }
+
   .card:hover .card-face {
     background: var(--bg-panel-hover);
     border-color: var(--accent);
@@ -209,9 +222,14 @@
 
   .card.selected .card-face { border-color: var(--accent); }
 
-  .card-back {
-    transform: rotateY(180deg);
-    justify-content: flex-start;
+  /* La transformacion 3D (preserve-3d/backface-visibility) no se imprime
+     bien en Chrome: al exportar a PDF ambas caras pueden quedar visibles
+     y superpuestas, una de ellas espejada. Al imprimir, mostramos solo
+     el frente sin ningun transform. */
+  @media print {
+    .card-inner { transform: none !important; }
+    .card-back { display: none !important; }
+    .card-front { position: relative !important; }
   }
 
   .card-back-hdr {
@@ -930,6 +948,7 @@
   // reemplaza, solo su innerHTML) alcanza para todas las cards del mapa,
   // incluso después de que cargarMapa() las vuelve a dibujar.
   document.getElementById("mapa-cards").addEventListener("click", (e) => {
+    if (e.target.closest(".card-back-chart")) return; // no cerrar al tocar el mini-grafico
     const cardEl = e.target.closest(".card");
     if (!cardEl) return;
     const sensorIndex = Number(cardEl.dataset.sensorIndex);
@@ -1033,7 +1052,12 @@
       card.className = "card";
       card.dataset.sensorIndex = s.sensor_index;
       card.innerHTML = buildSensorCardInner(s, "");
-      card.addEventListener("click", () => selectSensor(s.sensor_index, s.institucion || s.nombre, card, true, ""));
+      card.addEventListener("click", (e) => {
+        // Un click dentro del mini-grafico (para ver el tooltip de un punto)
+        // no debe cerrar la card — solo "✕ volver" o el resto del dorso.
+        if (e.target.closest(".card-back-chart")) return;
+        selectSensor(s.sensor_index, s.institucion || s.nombre, card, true, "");
+      });
       grid.appendChild(card);
     });
 
@@ -1099,7 +1123,8 @@
         plugins: {
           legend: { display: false },
           tooltip: {
-            backgroundColor: cs.getPropertyValue("--bg-panel").trim(),
+            backgroundColor: cs.getPropertyValue("--bg-panel").trim(), borderColor: colorBorder,
+            borderWidth: 1, titleColor: colorDim, bodyColor: cs.getPropertyValue("--text").trim(),
             titleFont: { family: "JetBrains Mono", size: 9 }, bodyFont: { family: "JetBrains Mono", size: 10 },
           },
         },

@@ -67,6 +67,13 @@ El Worker `worker/src/index.js` expone:
 Red de sensores PurpleAir instalada en escuelas y jardines de infantes de Saladillo, con fines de monitoreo ambiental y educación ambiental ciudadana.
 Ing. Luciano Lamaita — docente de Física y Química en Saladillo, Buenos Aires — más proyectos y materiales en [profe.lemeit.ar](https://profe.lemeit.ar)
 
+## Roadmap / bitácora de ideas
+
+Ideas pendientes de evaluar e implementar, anotadas para no perderlas entre sesiones:
+
+- **Selector de parámetros en la pestaña "Gráfico"**: permitir elegir qué variables graficar (no solo PM2.5), con checkboxes para activar/desactivar cada una y verlas superpuestas en el mismo gráfico — por ejemplo PM2.5 vs. Temperatura, o (a futuro) CO2 vs. Temperatura. Requiere analizar el manejo de ejes en Chart.js: cada parámetro con escala muy distinta (µg/m³, °C, %, ppm) necesita su propio eje Y (`scales.y`, `scales.y1`, etc., cada dataset asociado a uno vía `yAxisID`), no un solo eje compartido.
+- **Sensores AirGradient (a futuro)**: los sensores PurpleAir actuales no miden CO2. El autor tiene sensores AirGradient que sí lo hacen, pensados para sumar más adelante. Cuando se integren, van a necesitar su propia ingesta (adaptar `ingest_purpleair.py` o sumar un script nuevo) y su columna en `lecturas` — ahí es donde el selector multi-parámetro del punto anterior se vuelve útil, para poder cruzar CO2 con temperatura o con PM2.5 en el mismo gráfico.
+
 ## Contexto institucional y proyectos futuros
 
 Notas para retomar en próximas sesiones de desarrollo (no son parte de la funcionalidad actual del dashboard):
