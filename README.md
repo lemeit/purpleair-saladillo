@@ -67,6 +67,14 @@ El Worker `worker/src/index.js` expone:
 Red de sensores PurpleAir instalada en escuelas y jardines de infantes de Saladillo, con fines de monitoreo ambiental y educación ambiental ciudadana.
 Ing. Luciano Lamaita — docente de Física y Química en Saladillo, Buenos Aires — más proyectos y materiales en [profe.lemeit.ar](https://profe.lemeit.ar)
 
+## Contexto institucional y proyectos futuros
+
+Notas para retomar en próximas sesiones de desarrollo (no son parte de la funcionalidad actual del dashboard):
+
+- El autor (Ing. Luciano Lamaita) trabajó anteriormente en el **CEMCA** (Centro de Monitoreo de Calidad de Aire), dependiente del Ministerio de Ambiente de la Provincia de Buenos Aires — panel público en [apps.ambiente.gba.gob.ar/cemca](https://apps.ambiente.gba.gob.ar/cemca/). Se usó como referencia de diseño para el mapa de `aq.lemeit.ar` (selector de contaminante/capa de datos, mapa de estaciones).
+- Hay planes de integrar proyectos en conjunto con el CEMCA/Min. de Ambiente PBA a futuro, mencionados como ejemplo: **colocation de sensores de bajo costo** (instalar sensores PurpleAir junto a estaciones oficiales certificadas para comparar/calibrar contra el equipo de referencia).
+- Al retomar este tema, conviene revisar si hay wiki, contactos o documentación adicional que el autor quiera sumar antes de planificar la integración técnica (autenticación, formato de datos a compartir, etc.).
+
 ## Licencia
 
 Datos: cortesía de la red comunitaria de sensores [PurpleAir](https://www.purpleair.com), uso educativo/informativo.
