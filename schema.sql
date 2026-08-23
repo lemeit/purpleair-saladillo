@@ -23,7 +23,14 @@ CREATE TABLE IF NOT EXISTS lecturas (
     pm2_5_10min REAL,
     pm2_5_60min REAL,
     pm10_0 REAL,
-    temperatura REAL,                     -- Fahrenheit tal como lo reporta la API (convertir en frontend si hace falta)
+    pm2_5_a REAL,                         -- canal A (para overlay / detectar divergencia entre canales)
+    pm2_5_b REAL,                         -- canal B
+    pm1_0_a REAL,
+    pm1_0_b REAL,
+    pm10_0_a REAL,
+    pm10_0_b REAL,
+    voc REAL,                             -- gas_680 (BME688): solo en PurpleAir Flex/Zen/Touch o Classic con upgrade BME688; NULL en sensores PA-II/PA-II-SD estándar
+    temperatura REAL,                     -- Celsius (convertida desde Fahrenheit en ingest_purpleair.py)
     humedad REAL,
     presion REAL,
     rssi INTEGER,
