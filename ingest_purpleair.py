@@ -47,6 +47,10 @@ def fetch_purpleair_data():
         "show_only": SENSOR_INDEXES,
     }
     resp = requests.get(url, headers=headers, params=params, timeout=30)
+    if not resp.ok:
+        # Si la API rechaza el pedido (ej: un nombre de campo invalido en
+        # FIELDS), esto imprime el motivo real en vez de un traceback ciego.
+        print(f"Error de la API de PurpleAir ({resp.status_code}): {resp.text}")
     resp.raise_for_status()
     return resp.json()
 
@@ -77,9 +81,20 @@ def upsert_sensor_metadata(sensor_index, nombre, lat, lon):
     d1_query(sql, [sensor_index, nombre, lat, lon])
 
 
+def get_field(row, field_index, name):
+    # Lectura "segura": si la API de PurpleAir no devolvió esta columna para
+    # este sensor (campo no soportado por el hardware, nombre no reconocido,
+    # etc.), guardamos NULL en vez de que reviente todo el script con un
+    # KeyError/IndexError y se pierda la ingesta completa de esa corrida.
+    idx = field_index.get(name)
+    if idx is None or idx >= len(row):
+        return None
+    return row[idx]
+
+
 def insert_lectura(row, field_index):
-    sensor_index = row[field_index["sensor_index"]]
-    timestamp = row[field_index["last_seen"]]
+    sensor_index = get_field(row, field_index, "sensor_index")
+    timestamp = get_field(row, field_index, "last_seen")
 
     sql = """
         INSERT INTO lecturas (
@@ -91,22 +106,22 @@ def insert_lectura(row, field_index):
     params = [
         sensor_index,
         timestamp,
-        row[field_index["pm1.0"]],
-        row[field_index["pm2.5"]],
-        row[field_index["pm2.5_10minute"]],
-        row[field_index["pm2.5_60minute"]],
-        row[field_index["pm10.0"]],
-        row[field_index["pm2.5_a"]],
-        row[field_index["pm2.5_b"]],
-        row[field_index["pm1.0_a"]],
-        row[field_index["pm1.0_b"]],
-        row[field_index["pm10.0_a"]],
-        row[field_index["pm10.0_b"]],
-        row[field_index["gas_680"]],
-        fahrenheit_to_celsius(row[field_index["temperature"]]),
-        row[field_index["humidity"]],
-        row[field_index["pressure"]],
-        row[field_index["rssi"]],
+        get_field(row, field_index, "pm1.0"),
+        get_field(row, field_index, "pm2.5"),
+        get_field(row, field_index, "pm2.5_10minute"),
+        get_field(row, field_index, "pm2.5_60minute"),
+        get_field(row, field_index, "pm10.0"),
+        get_field(row, field_index, "pm2.5_a"),
+        get_field(row, field_index, "pm2.5_b"),
+        get_field(row, field_index, "pm1.0_a"),
+        get_field(row, field_index, "pm1.0_b"),
+        get_field(row, field_index, "pm10.0_a"),
+        get_field(row, field_index, "pm10.0_b"),
+        get_field(row, field_index, "gas_680"),
+        fahrenheit_to_celsius(get_field(row, field_index, "temperature")),
+        get_field(row, field_index, "humidity"),
+        get_field(row, field_index, "pressure"),
+        get_field(row, field_index, "rssi"),
     ]
     d1_query(sql, params)
 
