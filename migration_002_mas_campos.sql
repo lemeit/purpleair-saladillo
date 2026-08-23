@@ -1,5 +1,5 @@
 -- Migración: agrega canal A/B para PM1.0 y PM10.0 (ya teníamos pm2.5_a/b desde
--- la migración 001) y el campo de VOC (gas_680).
+-- la migración 001) y el campo de VOC (campo "voc" de la API de PurpleAir).
 --
 -- Nota sobre voc: ese campo solo lo reportan sensores PurpleAir Flex, Zen,
 -- Touch, o un Classic/Classic-SD con el sensor BME688 (upgrade de hardware).

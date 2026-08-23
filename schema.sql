@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS lecturas (
     pm1_0_b REAL,
     pm10_0_a REAL,
     pm10_0_b REAL,
-    voc REAL,                             -- gas_680 (BME688): solo en PurpleAir Flex/Zen/Touch o Classic con upgrade BME688; NULL en sensores PA-II/PA-II-SD estándar
+    voc REAL,                             -- campo "voc" de la API PurpleAir (BME68x): solo en PurpleAir Flex/Zen/Touch o Classic con upgrade BME688; NULL en sensores PA-II/PA-II-SD estándar
     temperatura REAL,                     -- Celsius (convertida desde Fahrenheit en ingest_purpleair.py)
     humedad REAL,
     presion REAL,

@@ -22,13 +22,22 @@ CF_API_TOKEN = os.environ["CF_API_TOKEN"]
 
 FIELDS = (
     "name,latitude,longitude,pm1.0,pm2.5,pm2.5_10minute,pm2.5_60minute,pm10.0,"
-    "pm2.5_a,pm2.5_b,pm1.0_a,pm1.0_b,pm10.0_a,pm10.0_b,gas_680,"
+    "pm2.5_a,pm2.5_b,pm1.0_a,pm1.0_b,pm10.0_a,pm10.0_b,voc,"
     "temperature,humidity,pressure,rssi,last_seen"
 )
-# gas_680 = VOC (Bosch BME688). Solo lo reportan sensores PurpleAir Flex/Zen/
-# Touch, o un Classic/Classic-SD con el chip BME688 (upgrade de hardware). En
-# los PA-II/PA-II-SD estándar (BME280) la API devuelve null para ese campo —
-# no es un error, esos sensores simplemente no tienen el sensor de gas.
+# voc = índice VOC (Bosch BME68x), promedio de canal A y B, en unidades IAQ
+# estáticas de Bosch (EXPERIMENTAL según la documentación de PurpleAir).
+# Solo lo reportan sensores PurpleAir Flex/Zen/Touch, o un Classic/Classic-SD
+# con el chip BME688 (upgrade de hardware). En los PA-II/PA-II-SD estándar
+# (BME280, sin sensor de gas) la API devuelve null para ese campo — no es un
+# error, esos sensores simplemente no tienen hardware de gas.
+#
+# NOTA: el nombre de campo "gas_680" (usado en una versión anterior de este
+# script) NO es válido en la API v1 actual — la API lo rechaza con
+# 400 Bad Request / InvalidFieldValueError. El nombre correcto es "voc"
+# (confirmado contra la documentación de la comunidad PurpleAir, agosto 2026).
+# Existen también "voc_a"/"voc_b" para leer los canales por separado, no
+# usados acá porque "voc" ya da el promedio.
 
 D1_URL = f"https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/d1/database/{CF_DATABASE_ID}/query"
 
@@ -117,7 +126,7 @@ def insert_lectura(row, field_index):
         get_field(row, field_index, "pm1.0_b"),
         get_field(row, field_index, "pm10.0_a"),
         get_field(row, field_index, "pm10.0_b"),
-        get_field(row, field_index, "gas_680"),
+        get_field(row, field_index, "voc"),
         fahrenheit_to_celsius(get_field(row, field_index, "temperature")),
         get_field(row, field_index, "humidity"),
         get_field(row, field_index, "pressure"),
