@@ -8,6 +8,8 @@ Es uno de tres proyectos de monitoreo ambiental que comparten la misma infraestr
 
 Cada sensor físico se registra en la tabla `sensores` (nombre, institución, coordenadas, estado activo/inactivo), independiente de la serie de lecturas — así se pueden dar de baja o agregar sensores sin perder el historial. El listado de instituciones vivas se administra desde ahí, no está hardcodeado en el dashboard.
 
+**Flota (agosto 2026)**: el autor tiene 5 unidades PurpleAir Flex en total. Una sola está instalada y activa online hoy; las otras 4 están pendientes de instalación/configuración en distintas instituciones. Como todo el hardware es Flex (sensor de gas BME688 incluido), el campo VOC debería poblarse en todos los sensores a medida que se vayan sumando — no es una excepción de un solo sensor.
+
 ## Arquitectura
 
 ```
