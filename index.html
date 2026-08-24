@@ -165,7 +165,11 @@
 
   .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    /* Más ancho que antes (era 200px): con el mini-grafico + nombres de
+       ejes en el dorso de la tarjeta, 200px lo dejaba muy angosto y
+       "estirado". Con 280px entran mejor los ticks/labels y se ve mas
+       proporcionado. */
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
     gap: 10px;
     margin-bottom: 20px;
   }
@@ -511,7 +515,7 @@
     .header-mid p { display: none; }
     .status span { display: none; }
     main { padding: 10px; }
-    .grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+    .grid { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; }
   }
 </style>
 </head>
@@ -607,7 +611,7 @@
       <div id="mapa-container"></div>
       <div class="mapa-legend" id="mapa-legend"></div>
     </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-top:12px" id="mapa-cards"></div>
+    <div class="grid" style="margin-top:12px;margin-bottom:0" id="mapa-cards"></div>
   </div>
 
   <div class="section" id="tab-acerca">
