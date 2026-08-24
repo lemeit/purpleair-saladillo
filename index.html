@@ -589,7 +589,7 @@
         <canvas id="history-chart" style="position:absolute;top:0;left:0;width:100%;height:100%"></canvas>
       </div>
       <div class="channel-toggle">
-        <label><input type="checkbox" id="toggle-channels" /> Mostrar canales A/B por separado (solo PM2.5)</label>
+        <label><input type="checkbox" id="toggle-channels" /> Mostrar canales A/B por separado (PM1.0/PM2.5/PM10 seleccionados)</label>
       </div>
     </div>
   </div>
@@ -662,6 +662,16 @@
     voc: { label: "VOC", unit: "", color: "#D9736F" },
   };
   const CHART_PARAM_ORDER = ["pm2_5", "pm1_0", "pm10_0", "temperatura", "humedad", "presion", "voc"];
+
+  // Los 3 parámetros de material particulado vienen del mismo par de láseres
+  // Plantower (canal A y canal B) — el valor "normal" que se grafica es el
+  // promedio de ambos. Temperatura/humedad/presión/VOC son de un único
+  // sensor (BME68x), no tienen A/B.
+  const CHANNEL_FIELDS = {
+    pm1_0: { a: "pm1_0_a", b: "pm1_0_b" },
+    pm2_5: { a: "pm2_5_a", b: "pm2_5_b" },
+    pm10_0: { a: "pm10_0_a", b: "pm10_0_b" },
+  };
 
   function buildParamToggle() {
     const box = document.getElementById("param-toggle");
@@ -1271,10 +1281,11 @@
     const colorBorder = cs.getPropertyValue("--border").trim();
 
     const selectedParams = getSelectedChartParams();
-    // Con un solo parámetro (y sin canales) mantenemos el área rellena de
-    // siempre; con más de uno superpuesto, el relleno se apaga para que las
-    // líneas no se tapen entre sí.
-    const soloUnParam = selectedParams.length === 1 && !(showChannels && selectedParams.includes("pm2_5"));
+    // Con un solo parámetro (y sin sus canales A/B activados) mantenemos el
+    // área rellena de siempre; con más de uno superpuesto, el relleno se
+    // apaga para que las líneas no se tapen entre sí.
+    const soloUnParam =
+      selectedParams.length === 1 && !(showChannels && CHANNEL_FIELDS[selectedParams[0]]);
 
     const datasets = [];
     const scales = {
@@ -1308,31 +1319,39 @@
       };
     });
 
-    // Los canales A/B del sensor solo existen para PM2.5 — se agregan como
-    // datasets extra sobre la misma escala "y_pm2_5" cuando corresponde.
-    if (showChannels && selectedParams.includes("pm2_5")) {
-      datasets.push(
-        {
-          label: "Canal A",
-          data: rows.map((r) => r.pm2_5_a),
-          borderColor: "rgba(217,105,31,0.5)",
-          borderWidth: 1,
-          borderDash: [4, 3],
-          pointRadius: 0,
-          fill: false,
-          yAxisID: "y_pm2_5",
-        },
-        {
-          label: "Canal B",
-          data: rows.map((r) => r.pm2_5_b),
-          borderColor: "rgba(217,164,65,0.6)",
-          borderWidth: 1,
-          borderDash: [4, 3],
-          pointRadius: 0,
-          fill: false,
-          yAxisID: "y_pm2_5",
-        }
-      );
+    // Canales A/B: los 3 parámetros de PM (PM1.0, PM2.5, PM10) vienen del
+    // mismo par de sensores Plantower, así que cualquiera de ellos que esté
+    // seleccionado puede mostrar sus propios canales A/B — no solo PM2.5.
+    // Temperatura/humedad/presión/VOC no tienen CHANNEL_FIELDS y se saltean.
+    if (showChannels) {
+      selectedParams.forEach((param) => {
+        const ch = CHANNEL_FIELDS[param];
+        if (!ch) return;
+        const def = CHART_PARAM_DEFS[param];
+        const axisId = `y_${param}`;
+        datasets.push(
+          {
+            label: `${def.label} · Canal A`,
+            data: rows.map((r) => r[ch.a]),
+            borderColor: def.color + "80", // ~50% opacidad
+            borderWidth: 1,
+            borderDash: [4, 3],
+            pointRadius: 0,
+            fill: false,
+            yAxisID: axisId,
+          },
+          {
+            label: `${def.label} · Canal B`,
+            data: rows.map((r) => r[ch.b]),
+            borderColor: def.color + "CC", // ~80% opacidad
+            borderWidth: 1,
+            borderDash: [1, 2],
+            pointRadius: 0,
+            fill: false,
+            yAxisID: axisId,
+          }
+        );
+      });
     }
 
     if (chart) chart.destroy();
