@@ -52,9 +52,13 @@ El archivo `index.html` (raíz del repo) es un single-file HTML estático que co
 
 Funcionalidad: tarjetas clickeables con el estado actual de cada sensor (AQI, PM2.5, temperatura, humedad), gráfico histórico con selector de rango (24h / 7d / 30d), overlay opcional de canales A/B del sensor (para detectar divergencia o degradación), exportación a CSV, y tema claro/oscuro persistido en `localStorage`.
 
+Si un sensor deja de reportar lecturas nuevas hace más de 25 minutos (se desconectó, se quedó sin señal, etc.), su tarjeta lo indica: el badge cambia a "Sin datos" en gris neutro (no un color de calidad de aire, porque ese dato ya quedó viejo), el velocímetro de AQI se atenúa, y aparece un aviso "⚠ Sin datos nuevos hace más de 25 min" debajo del horario de última actualización. Aplica tanto a la grilla de "Actuales" como a las tarjetas del "Mapa" (comparten la misma función de armado de tarjeta); la pestaña "Gráfico" no tiene grilla de tarjetas, solo el histórico del sensor seleccionado.
+
 ## Base de datos (Cloudflare D1)
 
-Base: `purpleair-saladillo` — tablas `sensores` (metadata) y `lecturas` (serie temporal), más la vista `v_ultima_lectura` (última lectura por sensor). Ver `schema.sql` para el esquema completo y `migration_001_canales.sql` para el agregado de columnas de canal A/B.
+Base: `purpleair-saladillo` — tablas `sensores` (metadata) y `lecturas` (serie temporal), más la vista `v_ultima_lectura` (última lectura por sensor). Ver `schema.sql` para el esquema completo, `migration_001_canales.sql` para el agregado de columnas de canal A/B, `migration_002_mas_campos.sql` para VOC y canales A/B de PM1.0/PM10.0, y `migration_003_dedupe_lecturas.sql` para el fix de tarjetas duplicadas descripto abajo.
+
+**Fix: tarjetas duplicadas/triplicadas al desconectarse un sensor (agosto 2026)** — cuando un sensor pierde conexión, la API de PurpleAir sigue devolviendo su último `last_seen` (congelado, no cambia). El `INSERT` de `ingest_purpleair.py` no chequeaba duplicados, así que cada corrida del cron (cada 15 min) agregaba una fila nueva con ese mismo timestamp, y `v_ultima_lectura` (que hacía `MAX(timestamp)` + `JOIN`) devolvía **todas** las filas empatadas en vez de una sola — de ahí las tarjetas repetidas. Se corrigió con tres cambios: un índice `UNIQUE(sensor_index, timestamp)` en `lecturas`, `ingest_purpleair.py` usando `INSERT OR IGNORE` (no-opea si esa lectura exacta ya existe), y `v_ultima_lectura` redefinida para garantizar como máximo una fila por sensor aunque hubiera timestamps empatados. `migration_003_dedupe_lecturas.sql` limpia los duplicados ya acumulados en la base real — se corre a mano con `wrangler d1 execute`.
 
 El Worker `worker/src/index.js` expone:
 

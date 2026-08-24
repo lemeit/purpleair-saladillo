@@ -105,8 +105,16 @@ def insert_lectura(row, field_index):
     sensor_index = get_field(row, field_index, "sensor_index")
     timestamp = get_field(row, field_index, "last_seen")
 
+    # OR IGNORE: si el sensor está desconectado, PurpleAir sigue devolviendo
+    # el mismo "last_seen" (congelado) corrida tras corrida. Antes eso
+    # generaba una fila nueva cada 15 min con timestamp repetido, y
+    # v_ultima_lectura (que dependía de MAX(timestamp)) terminaba
+    # devolviendo varias filas empatadas para ese sensor -> tarjetas
+    # duplicadas/triplicadas en el dashboard. Con el índice UNIQUE
+    # (sensor_index, timestamp) de schema.sql, este INSERT ahora no-opea
+    # en silencio cuando ya existe esa lectura exacta, en vez de duplicarla.
     sql = """
-        INSERT INTO lecturas (
+        INSERT OR IGNORE INTO lecturas (
             sensor_index, timestamp, pm1_0, pm2_5, pm2_5_10min,
             pm2_5_60min, pm10_0, pm2_5_a, pm2_5_b, pm1_0_a, pm1_0_b,
             pm10_0_a, pm10_0_b, voc, temperatura, humedad, presion, rssi

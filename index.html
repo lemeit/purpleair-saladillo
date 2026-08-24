@@ -770,6 +770,19 @@
     });
   }
 
+  // Margen sobre el cron de ingesta (corre cada 15 min): si pasó más de esto
+  // sin una lectura nueva, lo más probable es que el sensor esté
+  // desconectado (o la API de PurpleAir no lo esté reportando).
+  const STALE_MINUTES = 25;
+
+  function minutosSinDato(timestampStr) {
+    return (Date.now() - toBsAs(timestampStr).getTime()) / 60000;
+  }
+
+  function isStale(timestampStr) {
+    return minutosSinDato(timestampStr) > STALE_MINUTES;
+  }
+
   // ── GAUGE (velocímetro) de AQI ──
   // Bandas de igual ancho angular (45° c/u) para que se lean fácil, como un
   // velocímetro de auto — la aguja interpola dentro de la banda según el
@@ -1056,8 +1069,15 @@
   // Se usa tanto en "Actuales" como en las cards de "Mapa" — mismo diseño en
   // los dos lugares. idPrefix evita colisión de ids de <canvas> entre grillas.
   function buildSensorCardInner(s, idPrefix) {
+    const stale = isStale(s.timestamp);
     const aqi = pm25ToAqi(s.pm2_5);
-    const info = aqiInfo(aqi);
+    // Si el sensor está desconectado (sin lecturas nuevas hace rato), no
+    // mostramos un color/etiqueta de calidad de aire "Buena/Moderada/..." —
+    // ese dato quedó viejo y ya no refleja el aire actual. En su lugar, un
+    // badge neutro (gris, --text-dim) que avisa que no hay datos recientes.
+    const info = stale
+      ? { label: "Sin datos", color: "var(--text-dim)", bg: "transparent" }
+      : aqiInfo(aqi);
     // Si "institución" todavía no está cargada (columna nueva, ver README),
     // institución y nombre son el mismo valor — no repetirlo dos veces.
     const nombreDispositivo = (s.institucion && s.institucion !== s.nombre) ? s.nombre : `Sensor #${s.sensor_index}`;
@@ -1071,8 +1091,8 @@
               </div>
               <span class="badge" style="color:${info.color}; background:${info.bg}">${info.label}</span>
             </div>
-            <div class="aqi-gauge">
-              ${aqiGaugeSvg(aqi, info.color)}
+            <div class="aqi-gauge" style="${stale ? "opacity:0.35;" : ""}">
+              ${aqiGaugeSvg(stale ? null : aqi, info.color)}
             </div>
             <div class="aqi-label">Índice de calidad de aire (AQI)</div>
             <div class="metrics-row">
@@ -1100,6 +1120,7 @@
             </div>
             <div class="card-sub" style="margin-top:12px; padding-top:12px; border-top:1px solid var(--border);">
               Actualizado ${formatBsAsFull(s.timestamp)} (ARG)
+              ${stale ? `<br><span style="color:var(--text-dim)">⚠ Sin datos nuevos hace más de ${STALE_MINUTES} min — el sensor podría estar desconectado</span>` : ""}
             </div>
             <div class="card-flip-hint">toca para ver el gráfico ⟳</div>
           </div>

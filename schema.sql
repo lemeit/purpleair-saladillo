@@ -41,12 +41,20 @@ CREATE TABLE IF NOT EXISTS lecturas (
 CREATE INDEX IF NOT EXISTS idx_lecturas_sensor_ts ON lecturas (sensor_index, timestamp);
 CREATE INDEX IF NOT EXISTS idx_lecturas_ts ON lecturas (timestamp);
 
--- Vista de última lectura por sensor, útil para el dashboard "estado actual"
+-- UNIQUE en (sensor_index, timestamp): evita filas duplicadas cuando un
+-- sensor desconectado repite el mismo "last_seen" en corridas sucesivas del
+-- cron. Ver migration_003_dedupe_lecturas.sql para bases ya existentes.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_lecturas_sensor_ts_unique ON lecturas (sensor_index, timestamp);
+
+-- Vista de última lectura por sensor, útil para el dashboard "estado actual".
+-- NOT EXISTS en vez de MAX()+JOIN a propósito: garantiza como máximo UNA
+-- fila por sensor aunque hubiera timestamps empatados (desempata por id).
 CREATE VIEW IF NOT EXISTS v_ultima_lectura AS
 SELECT l.*
 FROM lecturas l
-INNER JOIN (
-    SELECT sensor_index, MAX(timestamp) AS max_ts
-    FROM lecturas
-    GROUP BY sensor_index
-) ult ON l.sensor_index = ult.sensor_index AND l.timestamp = ult.max_ts;
+WHERE NOT EXISTS (
+    SELECT 1 FROM lecturas l2
+    WHERE l2.sensor_index = l.sensor_index
+      AND (l2.timestamp > l.timestamp
+           OR (l2.timestamp = l.timestamp AND l2.id > l.id))
+);
