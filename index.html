@@ -1414,9 +1414,12 @@
     if (id === "mapa") cargarMapa();
   }
 
+  const APP_VERSION = "v1.0.0";
+
   if (window.LemeitCommon) {
     LemeitCommon.initSwitcher("aq");
     LemeitCommon.renderFooter(document.getElementById("lm-footer"), {
+      version: APP_VERSION,
       extra: 'datos de <a href="https://www.purpleair.com" target="_blank">PurpleAir</a>',
     });
   }
