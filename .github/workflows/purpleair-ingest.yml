@@ -1,9 +1,13 @@
-name: Ingesta PurpleAir
+name: Ingesta PurpleAir (manual / respaldo)
 
+# Sin "schedule:" a propósito: la ingesta automática cada 15 min pasó a un
+# Cron Trigger de Cloudflare (worker/wrangler.toml, worker/src/index.js),
+# que no depende de la cola de scheduled events de GitHub Actions (la causa
+# más probable de las corridas salteadas que tenía este workflow). Este
+# Action queda solo para correr una ingesta puntual a mano si hace falta
+# (ej. backfill, o el Worker caído) via workflow_dispatch.
 on:
-  schedule:
-    - cron: "*/15 * * * *"   # cada 15 minutos, ajustá según necesites
-  workflow_dispatch: {}       # permite correrlo a mano desde GitHub
+  workflow_dispatch: {}
 
 jobs:
   ingest:
