@@ -7,6 +7,8 @@ name: Ingesta PurpleAir (manual / respaldo)
 # Action queda solo para correr una ingesta puntual a mano si hace falta
 # (ej. backfill, o el Worker caído) via workflow_dispatch.
 on:
+  schedule:
+    - cron: "7,22,37,52 * * * *"
   workflow_dispatch: {}
 
 jobs:
