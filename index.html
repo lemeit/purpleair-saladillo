@@ -625,7 +625,7 @@
         Red de sensores <a href="https://www.purpleair.com" target="_blank" style="color:var(--accent)">PurpleAir</a> instalada en escuelas y jardines de infantes de Saladillo, que mide material particulado (PM2.5/PM10) en tiempo real como parte de una iniciativa de monitoreo y educación ambiental.
       </p>
       <p style="font-size:12px;color:var(--text-dim);line-height:1.7;margin-top:10px">
-        Arquitectura: un script en Python consulta la API de PurpleAir cada 15 minutos (GitHub Actions) y guarda los datos en Cloudflare D1; un Worker expone una API REST propia que consume este dashboard, publicado en Cloudflare Pages.
+        Arquitectura: varios disparadores automáticos (un Worker de Cloudflare y GitHub Actions, con un respaldo externo) consultan la API de PurpleAir cada 15 minutos y guardan los datos en Cloudflare D1; un Worker expone una API REST propia que consume este dashboard, publicado en Cloudflare Pages.
         Es uno de tres proyectos ambientales hermanos: <a href="https://emas.lemeit.ar" target="_blank" style="color:var(--accent)">emas.lemeit.ar</a> (meteorología), este (calidad del aire) y <a href="https://wq.lemeit.ar" target="_blank" style="color:var(--accent)">wq.lemeit.ar</a> (calidad del agua).
       </p>
       <p style="font-size:12px;color:var(--text-dim);line-height:1.7;margin-top:10px">

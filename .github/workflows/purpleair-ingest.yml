@@ -1,11 +1,18 @@
-name: Ingesta PurpleAir (manual / respaldo)
+name: Ingesta PurpleAir (automática + manual)
 
-# Sin "schedule:" a propósito: la ingesta automática cada 15 min pasó a un
-# Cron Trigger de Cloudflare (worker/wrangler.toml, worker/src/index.js),
-# que no depende de la cola de scheduled events de GitHub Actions (la causa
-# más probable de las corridas salteadas que tenía este workflow). Este
-# Action queda solo para correr una ingesta puntual a mano si hace falta
-# (ej. backfill, o el Worker caído) via workflow_dispatch.
+# Historia (ver README.md → "Historia de la ingesta automática" para el
+# detalle completo): esto corría con schedule cada 15 min, se sacó en
+# agosto 2026 al migrar la ingesta a un Cron Trigger de Cloudflare
+# (worker/wrangler.toml, worker/src/index.js), y se volvió a activar días
+# después porque ese Cron Trigger quedó registrado pero nunca disparó
+# scheduled() (parece un bug del lado de Cloudflare, no de este repo).
+#
+# Corre en los minutos :07/:22/:37/:52 — a propósito NO coincide con los
+# minutos del Cron Trigger de Cloudflare (:03/:18/:33/:48) ni con los del
+# cron externo en cron-job.org (:12/:27/:42/:57), que se sumó como tercera
+# capa de respaldo. Los tres pueden correr en paralelo sin duplicar datos
+# gracias al INSERT OR IGNORE + UNIQUE(sensor_index, timestamp) en
+# schema.sql. workflow_dispatch se mantiene para backfill puntual a mano.
 on:
   schedule:
     - cron: "7,22,37,52 * * * *"
