@@ -6,10 +6,3 @@ compatibility_date = "2026-08-19"
 binding = "DB"
 database_name = "purpleair-saladillo"
 database_id = "9ced8d5e-e3ae-4718-a553-21e349368e1c"
-
-[triggers]
-# Cada 15 min, corrido en los minutos :03/:18/:33/:48 en vez de en los
-# redondos (:00/:15/:30/:45) — evita el pico de congestión que documenta
-# GitHub para scheduled events justo en esos minutos (fue la causa más
-# probable de las corridas salteadas del cron de Actions que reemplaza esto).
-crons = ["3,18,33,48 * * * *"]
