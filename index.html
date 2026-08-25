@@ -18,7 +18,7 @@
   // Aplicar el tema ANTES de pintar la página para evitar flash de color equivocado.
   (function () {
     var saved = localStorage.getItem("theme");
-    var theme = saved || (window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+    var theme = saved || "light"; // default: claro para todos los visitantes nuevos, sin importar el tema del SO
     document.documentElement.setAttribute("data-theme", theme);
   })();
 </script>
@@ -626,7 +626,7 @@
       </p>
       <p style="font-size:12px;color:var(--text-dim);line-height:1.7;margin-top:10px">
         Arquitectura: un script en Python consulta la API de PurpleAir cada 15 minutos (GitHub Actions) y guarda los datos en Cloudflare D1; un Worker expone una API REST propia que consume este dashboard, publicado en Cloudflare Pages.
-        Es uno de tres proyectos ambientales hermanos: <a href="https://emas.lemeit.ar" target="_blank" style="color:var(--accent)">emas.lemeit.ar</a> (meteorología), este (calidad del aire) y wq.lemeit.ar (calidad del agua, en desarrollo).
+        Es uno de tres proyectos ambientales hermanos: <a href="https://emas.lemeit.ar" target="_blank" style="color:var(--accent)">emas.lemeit.ar</a> (meteorología), este (calidad del aire) y <a href="https://wq.lemeit.ar" target="_blank" style="color:var(--accent)">wq.lemeit.ar</a> (calidad del agua).
       </p>
       <p style="font-size:12px;color:var(--text-dim);line-height:1.7;margin-top:10px">
         Ing. Luciano Lamaita — docente de Física y Química en Saladillo, Buenos Aires — más proyectos en <a href="https://profe.lemeit.ar" target="_blank" style="color:var(--accent)">profe.lemeit.ar</a>
