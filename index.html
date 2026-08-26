@@ -389,6 +389,43 @@
     margin-bottom: 12px;
   }
 
+  /* ── Atribución (pestaña Acerca de): logos de las redes/programas de los
+     que participa el proyecto. Cada logo va en un chip con el fondo que
+     necesita para leerse bien — el de PurpleAir es un recorte blanco sin
+     versión de color, así que necesita fondo oscuro fijo; los otros dos
+     están pensados para fondo claro. El fondo del chip es fijo (no sigue el
+     tema claro/oscuro del sitio) justamente para no depender de eso. */
+  .acerca-attrib {
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+  }
+  .acerca-attrib-label {
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    margin-bottom: 10px;
+  }
+  .acerca-attrib-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+  }
+  .attrib-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 14px;
+    border-radius: 8px;
+    line-height: 0;
+    transition: opacity .15s;
+  }
+  .attrib-chip:hover { opacity: .8; }
+  .attrib-chip-light { background: #ffffff; }
+  .attrib-chip-dark { background: #1a1a1a; }
+  .attrib-chip img { display: block; height: 20px; width: auto; }
+
   /* ── SELECT (mismo estilo que emas.lemeit.ar) ── */
   .sel {
     background: var(--bg-panel-hover);
@@ -623,7 +660,7 @@
     <div class="panel">
       <div class="panel-title">Acerca de este proyecto</div>
       <p style="font-size:12px;color:var(--text-dim);line-height:1.7">
-        Red de sensores <a href="https://www.purpleair.com" target="_blank" style="color:var(--accent)">PurpleAir</a> instalada en escuelas y jardines de infantes de Saladillo, que mide material particulado (PM2.5/PM10) en tiempo real como parte de una iniciativa de monitoreo y educación ambiental.
+        Red de sensores <a href="https://www.purpleair.com" target="_blank" style="color:var(--accent)">PurpleAir</a> y <a href="https://www.airgradient.com" target="_blank" style="color:var(--accent)">AirGradient</a> instalada en escuelas, jardines de infantes y domicilios de Saladillo, que mide material particulado (PM2.5/PM10), CO2 y otros parámetros en tiempo real como parte de una iniciativa de monitoreo y educación ambiental.
       </p>
       <p style="font-size:12px;color:var(--text-dim);line-height:1.7;margin-top:10px">
         Arquitectura: varios disparadores automáticos (un Worker de Cloudflare y GitHub Actions, con un respaldo externo) consultan la API de PurpleAir cada 15 minutos y guardan los datos en Cloudflare D1; un Worker expone una API REST propia que consume este dashboard, publicado en Cloudflare Pages.
@@ -632,6 +669,20 @@
       <p style="font-size:12px;color:var(--text-dim);line-height:1.7;margin-top:10px">
         Ing. Luciano Lamaita — docente de Física y Química en Saladillo, Buenos Aires — más proyectos en <a href="https://profe.lemeit.ar" target="_blank" style="color:var(--accent)">profe.lemeit.ar</a>
       </p>
+      <div class="acerca-attrib">
+        <div class="acerca-attrib-label">Redes y programas de los que este proyecto participa</div>
+        <div class="acerca-attrib-row">
+          <a href="https://openaq.org" target="_blank" class="attrib-chip attrib-chip-light" title="OpenAQ — el autor es Embajador Comunitario desde 2023">
+            <img src="https://design.lemeit.ar/logos/openaq.svg" alt="OpenAQ" height="20">
+          </a>
+          <a href="https://www.purpleair.com" target="_blank" class="attrib-chip attrib-chip-dark" title="PurpleAir">
+            <img src="https://design.lemeit.ar/logos/purpleair.png" alt="PurpleAir" height="20">
+          </a>
+          <a href="https://www.airgradient.com" target="_blank" class="attrib-chip attrib-chip-light" title="AirGradient">
+            <img src="https://design.lemeit.ar/logos/airgradient.svg" alt="AirGradient" height="20">
+          </a>
+        </div>
+      </div>
     </div>
   </div>
 
