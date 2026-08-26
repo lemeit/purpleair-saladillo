@@ -188,6 +188,7 @@
   .card-inner {
     position: relative;
     width: 100%;
+    height: 100%;
     min-height: 280px;
     transition: transform .5s;
     transform-style: preserve-3d;
@@ -206,13 +207,16 @@
     flex-direction: column;
   }
 
-  /* El frente queda en el flujo normal: así el alto de la card lo define
-     el contenido real (nombres largos, VOC opcional, etc.) en vez de un
-     numero fijo que se queda corto o deja hueco de mas. El dorso se
-     superpone (position:absolute) y toma automaticamente esa misma altura. */
+  /* El frente ocupa el 100% de .card-inner, que a su vez se estira (grid
+     stretch) hasta la altura de la card más alta de su fila — así todas
+     las cards de una misma fila quedan parejas aunque el contenido varíe
+     (nombres largos, VOC/CO2 presente o no, etc.), en vez de que cada
+     card recorte su fondo al tamaño de su propio contenido. */
   .card-front {
     position: relative;
+    height: 100%;
     min-height: 280px;
+    box-sizing: border-box;
   }
 
   .card-back {
@@ -271,7 +275,11 @@
     font-size: 9px;
     color: var(--text-dim);
     text-align: center;
-    margin-top: 8px;
+    /* auto empuja el hint al fondo de la card — junto con .card-front al
+       100% de alto, así el espacio "de sobra" en cards con menos contenido
+       queda entre las métricas y el hint, no rompiendo la alineación. */
+    margin-top: auto;
+    padding-top: 8px;
     opacity: .6;
   }
 
@@ -427,6 +435,14 @@
   .attrib-chip-light { background: #ffffff; }
   .attrib-chip-dark { background: #1a1a1a; }
   .attrib-chip img { display: block; height: 20px; width: auto; }
+
+  /* Misma fila de logos, versión chica para el footer compartido */
+  .lm-footer-attrib {
+    justify-content: center;
+    margin-top: 8px;
+  }
+  .attrib-chip-sm { padding: 5px 10px; }
+  .attrib-chip-sm img { height: 16px; }
 
   /* ── SELECT (mismo estilo que emas.lemeit.ar) ── */
   .sel {
@@ -605,6 +621,7 @@
     <div class="table-wrap">
       <div class="table-hdr">
         <h2 id="hist-titulo">Seleccioná una institución para ver el histórico</h2>
+        <select class="sel" id="sel-sensor-hist" onchange="onSensorSelect(this.value)"></select>
         <select class="sel" id="sel-range-hist" onchange="loadHistorialTable()">
           <option value="24h">24 h</option>
           <option value="7d">7 días</option>
@@ -620,6 +637,7 @@
     <div class="chart-wrap">
       <div class="chart-hdr">
         <h2 id="graf-titulo">Seleccioná una institución para ver el histórico</h2>
+        <select class="sel" id="sel-sensor-grafico" onchange="onSensorSelect(this.value)"></select>
         <select class="sel" id="sel-range-chart" onchange="loadHistory()">
           <option value="24h">24 h</option>
           <option value="7d">7 días</option>
@@ -630,6 +648,7 @@
       <div class="param-toggle" id="param-toggle"></div>
       <div class="chart-canvas-wrap">
         <canvas id="history-chart" style="position:absolute;top:0;left:0;width:100%;height:100%"></canvas>
+        <div class="loader" id="chart-empty" style="display:none;position:absolute;top:0;left:0;right:0;bottom:0;align-items:center;justify-content:center">Este sensor no tiene datos en el rango seleccionado.</div>
       </div>
       <div class="channel-toggle">
         <label><input type="checkbox" id="toggle-channels" /> Mostrar canales A/B por separado (PM1.0/PM2.5/PM10 seleccionados)</label>
@@ -1116,6 +1135,7 @@
       const data = await res.json();
       latestSensors = data;
       renderGrid(data);
+      populateSensorSelects();
       if (document.getElementById("tab-mapa").classList.contains("active")) cargarMapa();
       document.getElementById("status-text").textContent =
         `${data.length} sensor${data.length === 1 ? "" : "es"} activo${data.length === 1 ? "" : "s"} · actualizado cada 15 min`;
@@ -1225,16 +1245,62 @@
       grid.appendChild(card);
     });
 
-    // Selecciona el primero por defecto para Historial/Gráfico, pero SIN dar
-    // vuelta la card — en "Actuales" debe verse el frente (datos actuales)
-    // de todos los sensores hasta que el usuario toque uno.
+    // Selecciona por defecto el primer sensor CON datos recientes (si hay
+    // alguno) para Historial/Gráfico, sin dar vuelta la card — en "Actuales"
+    // debe verse el frente (datos actuales) de todos los sensores hasta que
+    // el usuario toque uno. Si todos están desconectados, cae al primero
+    // igual (mejor mostrar algo que dejar todo vacío).
     const first = grid.querySelector(".card");
     if (first && sensors[0]) {
-      selectSensor(sensors[0].sensor_index, sensors[0].institucion || sensors[0].nombre, first, false, "");
+      const porDefecto = sensors.find((s) => !isStale(s.timestamp)) || sensors[0];
+      const cardPorDefecto = grid.querySelector(`.card[data-sensor-index="${porDefecto.sensor_index}"]`) || first;
+      selectSensor(porDefecto.sensor_index, porDefecto.institucion || porDefecto.nombre, cardPorDefecto, false, "");
     }
   }
 
+  // Los selectores de sensor de las pestañas Historial y Gráfico (además de
+  // tocar una card en Actuales/Mapa) — todos apuntan a la misma selección.
+  function populateSensorSelects() {
+    const opts = latestSensors
+      .map((s) => `<option value="${s.sensor_index}">${s.institucion || s.nombre}</option>`)
+      .join("");
+    ["sel-sensor-hist", "sel-sensor-grafico"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = opts;
+    });
+    syncSensorSelectors();
+  }
+
+  function syncSensorSelectors() {
+    if (currentSensorIndex == null) return;
+    ["sel-sensor-hist", "sel-sensor-grafico"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.value = String(currentSensorIndex);
+    });
+  }
+
+  function onSensorSelect(value) {
+    const sensorIndex = Number(value);
+    if (!sensorIndex) return;
+    const s = latestSensors.find((x) => x.sensor_index === sensorIndex);
+    const label = (s && (s.institucion || s.nombre)) || "";
+    // Si el sensor elegido tiene una card visible en "Actuales", reusamos
+    // selectSensor (sin flip) para que quede resaltada ahí también.
+    const cardEl = document.querySelector(`#sensor-grid .card[data-sensor-index="${sensorIndex}"]`);
+    if (cardEl) selectSensor(sensorIndex, label, cardEl, false, "");
+    else applySensorSelection(sensorIndex, label);
+  }
+
   let miniChart = null;
+
+  async function applySensorSelection(sensorIndex, label) {
+    currentSensorIndex = sensorIndex;
+    currentLabel = label;
+    document.getElementById("hist-titulo").textContent = `Registros recientes — ${label}`;
+    document.getElementById("graf-titulo").textContent = `Histórico — ${label}`;
+    await Promise.all([loadHistory(), loadHistorialTable()]);
+    syncSensorSelectors();
+  }
 
   async function selectSensor(sensorIndex, label, cardEl, flip = true, canvasPrefix = "") {
     const yaEstaba = cardEl.classList.contains("selected");
@@ -1242,11 +1308,7 @@
       if (c !== cardEl) c.classList.remove("selected", "flipped");
     });
     cardEl.classList.add("selected");
-    currentSensorIndex = sensorIndex;
-    currentLabel = label;
-    document.getElementById("hist-titulo").textContent = `Registros recientes — ${label}`;
-    document.getElementById("graf-titulo").textContent = `Histórico — ${label}`;
-    await Promise.all([loadHistory(), loadHistorialTable()]);
+    await applySensorSelection(sensorIndex, label);
 
     if (!flip) return; // selección automática al cargar la grilla — no dar vuelta la card
 
@@ -1332,6 +1394,9 @@
         const co2Cb = co2Item.querySelector("input");
         if (!hasCo2 && co2Cb.checked) co2Cb.checked = false;
       }
+
+      const chartEmpty = document.getElementById("chart-empty");
+      if (chartEmpty) chartEmpty.style.display = currentRows.length ? "none" : "flex";
 
       renderChart(currentRows);
     } catch (err) {
@@ -1523,9 +1588,32 @@
     LemeitCommon.initSwitcher("aq");
     LemeitCommon.renderFooter(document.getElementById("lm-footer"), {
       version: APP_VERSION,
-      extra: 'datos de <a href="https://www.purpleair.com" target="_blank">PurpleAir</a>',
+      extra: 'datos de <a href="https://www.purpleair.com" target="_blank">PurpleAir</a> y <a href="https://www.airgradient.com" target="_blank">AirGradient</a>',
     });
+    renderFooterAttribution();
   }
+  // Misma fila de logos que en "Acerca de", en versión chica, agregada
+  // después de LemeitCommon.renderFooter() porque esa función reemplaza
+  // por completo el innerHTML de #lm-footer.
+  function renderFooterAttribution() {
+    const footer = document.getElementById("lm-footer");
+    if (!footer) return;
+    const row = document.createElement("div");
+    row.className = "acerca-attrib-row lm-footer-attrib";
+    row.innerHTML = `
+      <a href="https://openaq.org" target="_blank" class="attrib-chip attrib-chip-light attrib-chip-sm" title="OpenAQ — el autor es Embajador Comunitario desde 2023">
+        <img src="https://design.lemeit.ar/logos/openaq.svg" alt="OpenAQ" height="16">
+      </a>
+      <a href="https://www.purpleair.com" target="_blank" class="attrib-chip attrib-chip-light attrib-chip-sm" title="PurpleAir">
+        <img src="https://design.lemeit.ar/logos/purpleair.png" alt="PurpleAir" height="16">
+      </a>
+      <a href="https://www.airgradient.com" target="_blank" class="attrib-chip attrib-chip-light attrib-chip-sm" title="AirGradient">
+        <img src="https://design.lemeit.ar/logos/airgradient.svg" alt="AirGradient" height="16">
+      </a>
+    `;
+    footer.appendChild(row);
+  }
+
   buildParamToggle();
   loadSensors();
   setInterval(loadSensors, 5 * 60 * 1000); // refresca cada 5 min
