@@ -398,13 +398,14 @@
   }
 
   /* ── Atribución (pestaña Acerca de): logos de las redes/programas de los
-     que participa el proyecto. Cada logo va en un chip con fondo claro fijo
-     (no sigue el tema claro/oscuro del sitio) para que se lea igual siempre.
-     PurpleAir usa una versión recoloreada a su morado de marca (#a4a) a
-     partir del recorte blanco original — el blanco puro queda guardado
-     aparte como purpleair-white.png por si hace falta sobre fondo oscuro
-     en algún otro lugar. .attrib-chip-dark queda definido igual por si se
-     necesita en el futuro para algún logo que sí sea blanco-sobre-transparente. */
+     que participa el proyecto. Los chips (.lm-attrib-row/.lm-attrib-chip)
+     ahora viven en design.lemeit.ar/lemeit-theme.css — mismo componente que
+     usa el footer compartido (LemeitCommon.renderFooter, ver opts.logos más
+     abajo), así que un solo lugar mantiene el estilo de ambos. PurpleAir usa
+     una versión recoloreada a su morado de marca (#a4a) a partir del recorte
+     blanco original — el blanco puro queda guardado aparte como
+     purpleair-white.png en el repo de logos por si hace falta en algún
+     lugar con fondo oscuro fijo (.lm-attrib-chip-dark). */
   .acerca-attrib {
     margin-top: 16px;
     padding-top: 14px;
@@ -417,32 +418,6 @@
     letter-spacing: .04em;
     margin-bottom: 10px;
   }
-  .acerca-attrib-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    align-items: center;
-  }
-  .attrib-chip {
-    display: inline-flex;
-    align-items: center;
-    padding: 8px 14px;
-    border-radius: 8px;
-    line-height: 0;
-    transition: opacity .15s;
-  }
-  .attrib-chip:hover { opacity: .8; }
-  .attrib-chip-light { background: #ffffff; }
-  .attrib-chip-dark { background: #1a1a1a; }
-  .attrib-chip img { display: block; height: 20px; width: auto; }
-
-  /* Misma fila de logos, versión chica para el footer compartido */
-  .lm-footer-attrib {
-    justify-content: center;
-    margin-top: 8px;
-  }
-  .attrib-chip-sm { padding: 5px 10px; }
-  .attrib-chip-sm img { height: 16px; }
 
   /* ── SELECT (mismo estilo que emas.lemeit.ar) ── */
   .sel {
@@ -692,14 +667,14 @@
       </p>
       <div class="acerca-attrib">
         <div class="acerca-attrib-label">Redes y programas de los que este proyecto participa</div>
-        <div class="acerca-attrib-row">
-          <a href="https://openaq.org" target="_blank" class="attrib-chip attrib-chip-light" title="OpenAQ — el autor es Embajador Comunitario desde 2023">
+        <div class="lm-attrib-row">
+          <a href="https://openaq.org" target="_blank" class="lm-attrib-chip" title="OpenAQ — el autor es Embajador Comunitario desde 2023">
             <img src="https://design.lemeit.ar/logos/openaq.svg" alt="OpenAQ" height="20">
           </a>
-          <a href="https://www.purpleair.com" target="_blank" class="attrib-chip attrib-chip-light" title="PurpleAir">
+          <a href="https://www.purpleair.com" target="_blank" class="lm-attrib-chip" title="PurpleAir">
             <img src="https://design.lemeit.ar/logos/purpleair.png" alt="PurpleAir" height="20">
           </a>
-          <a href="https://www.airgradient.com" target="_blank" class="attrib-chip attrib-chip-light" title="AirGradient">
+          <a href="https://www.airgradient.com" target="_blank" class="lm-attrib-chip" title="AirGradient">
             <img src="https://design.lemeit.ar/logos/airgradient.svg" alt="AirGradient" height="20">
           </a>
         </div>
@@ -1589,29 +1564,15 @@
     LemeitCommon.renderFooter(document.getElementById("lm-footer"), {
       version: APP_VERSION,
       extra: 'datos de <a href="https://www.purpleair.com" target="_blank">PurpleAir</a> y <a href="https://www.airgradient.com" target="_blank">AirGradient</a>',
+      // Misma fila de logos que en "Acerca de" — ahora renderFooter() de
+      // lemeit-common.js la arma sola, antes del texto, con el layout
+      // compartido definido en lemeit-theme.css.
+      logos: [
+        { href: "https://openaq.org", src: "https://design.lemeit.ar/logos/openaq.svg", alt: "OpenAQ", title: "OpenAQ — el autor es Embajador Comunitario desde 2023" },
+        { href: "https://www.purpleair.com", src: "https://design.lemeit.ar/logos/purpleair.png", alt: "PurpleAir" },
+        { href: "https://www.airgradient.com", src: "https://design.lemeit.ar/logos/airgradient.svg", alt: "AirGradient" },
+      ],
     });
-    renderFooterAttribution();
-  }
-  // Misma fila de logos que en "Acerca de", en versión chica, agregada
-  // después de LemeitCommon.renderFooter() porque esa función reemplaza
-  // por completo el innerHTML de #lm-footer.
-  function renderFooterAttribution() {
-    const footer = document.getElementById("lm-footer");
-    if (!footer) return;
-    const row = document.createElement("div");
-    row.className = "acerca-attrib-row lm-footer-attrib";
-    row.innerHTML = `
-      <a href="https://openaq.org" target="_blank" class="attrib-chip attrib-chip-light attrib-chip-sm" title="OpenAQ — el autor es Embajador Comunitario desde 2023">
-        <img src="https://design.lemeit.ar/logos/openaq.svg" alt="OpenAQ" height="16">
-      </a>
-      <a href="https://www.purpleair.com" target="_blank" class="attrib-chip attrib-chip-light attrib-chip-sm" title="PurpleAir">
-        <img src="https://design.lemeit.ar/logos/purpleair.png" alt="PurpleAir" height="16">
-      </a>
-      <a href="https://www.airgradient.com" target="_blank" class="attrib-chip attrib-chip-light attrib-chip-sm" title="AirGradient">
-        <img src="https://design.lemeit.ar/logos/airgradient.svg" alt="AirGradient" height="16">
-      </a>
-    `;
-    footer.appendChild(row);
   }
 
   buildParamToggle();
