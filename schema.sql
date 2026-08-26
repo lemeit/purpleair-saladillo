@@ -3,14 +3,16 @@
 
 -- Metadata de cada sensor físico: dónde está instalado y su sensor_index de PurpleAir
 CREATE TABLE IF NOT EXISTS sensores (
-    sensor_index INTEGER PRIMARY KEY,     -- sensor_index que asigna PurpleAir al registrarlo
+    sensor_index INTEGER PRIMARY KEY,     -- sensor_index de PurpleAir, o ID sintético 900000+ para AirGradient (ver migration_004)
     nombre TEXT NOT NULL,                 -- nombre descriptivo, ej. "PurpleAir-9f3"
     institucion TEXT,                     -- nombre de la escuela/jardín donde está instalado
     latitud REAL,
     longitud REAL,
     activo INTEGER DEFAULT 1,             -- 1 = actualmente instalado y monitoreado, 0 = de baja/en tránsito
     fecha_instalacion TEXT,               -- ISO8601, opcional
-    notas TEXT
+    notas TEXT,
+    proveedor TEXT NOT NULL DEFAULT 'purpleair',  -- 'purpleair' | 'airgradient' | futuro 'clarity'
+    serial_externo TEXT                   -- serial real del fabricante (AirGradient), para reconocer el sensor entre corridas
 );
 
 -- Serie temporal de lecturas. Una fila por consulta a la API por sensor.
@@ -34,6 +36,7 @@ CREATE TABLE IF NOT EXISTS lecturas (
     humedad REAL,
     presion REAL,
     rssi INTEGER,
+    co2 REAL,                             -- ppm, solo AirGradient (ver migration_004) — NULL en filas de PurpleAir
     creado_en TEXT DEFAULT (datetime('now'))
 );
 

@@ -1,25 +1,28 @@
 /**
- * API de solo lectura + ingesta programada para el proyecto PurpleAir Saladillo.
- * Expone datos de la base D1 sin necesidad de exponer ningún token:
+ * API de solo lectura + ingesta programada para la red de sensores de aire de
+ * Saladillo (aq.lemeit.ar) — hoy PurpleAir y AirGradient conviven en las
+ * mismas tablas sensores/lecturas de D1, así el dashboard los muestra
+ * unificados en vez de necesitar un portal por fabricante.
+ * Expone datos de la base D1 sin necesidad de exponer ningún token propio:
  * el binding a D1 se configura en wrangler.toml y Cloudflare lo
  * inyecta de forma segura en tiempo de ejecución.
  *
  * Endpoints:
- *   GET /api/sensores          -> metadata de todos los sensores
+ *   GET /api/sensores          -> metadata de todos los sensores (cualquier proveedor)
  *   GET /api/ultimas           -> última lectura de cada sensor (vista v_ultima_lectura)
  *   GET /api/historico/:index  -> historial de un sensor (últimas 200 lecturas)
  *
- * Ingesta (scheduled, ver [triggers] en wrangler.toml): reemplaza el cron de
- * GitHub Actions (`.github/workflows/purpleair-ingest.yml`, ahora solo
- * workflow_dispatch manual) — la ejecución programada y el guardado en D1
- * pasan a depender únicamente de Cloudflare, no de la cola de scheduled
- * events de GitHub (que es la que venía salteando corridas). Reescribe
- * ingest_purpleair.py línea por línea usando el binding env.DB en vez de
- * la API HTTP de D1 (por eso ya no hace falta CF_ACCOUNT_ID/CF_DATABASE_ID/
- * CF_API_TOKEN acá — solo PURPLEAIR_API_KEY y SENSOR_INDEXES como secrets).
- * ingest_purpleair.py se mantiene en el repo como referencia / para correr
- * ingestas puntuales a mano desde una máquina local, ya no como el camino
- * principal.
+ * Ingesta (scheduled, ver [triggers] en wrangler.toml): reemplazó al cron de
+ * GitHub Actions (`.github/workflows/purpleair-ingest.yml`) como camino
+ * principal para PurpleAir — aunque terminó necesitando volver a sumarse
+ * como respaldo por un problema del lado de Cloudflare (ver README.md →
+ * "Historia de la ingesta automática"). ingest_purpleair.py se mantiene en
+ * el repo como referencia / para correr ingestas puntuales a mano.
+ *
+ * AirGradient (agosto 2026) se sumó directo acá, sin script Python propio:
+ * ver ingestAirGradient() más abajo — usa la API pública de AirGradient
+ * (secret AIRGRADIENT_API_TOKEN) y auto-registra cada sensor nuevo que
+ * aparece, sin necesitar una lista de IDs a mano.
  */
 
 // ── Ingesta PurpleAir → D1 ─────────────────────────────────────────────────
@@ -136,6 +139,139 @@ async function ingest(env) {
   return { ok: errores.length === 0, guardados, total: data.data.length, errores };
 }
 
+// ── Ingesta AirGradient → D1 ─────────────────────────────────────────────────
+// API pública de AirGradient (auth por query param "token", ver
+// https://api.airgradient.com/public/docs/api/v1/). A diferencia de PurpleAir,
+// acá no hace falta que le pasemos una lista de sensores: el endpoint
+// "todas las locations del token" devuelve de una todo lo que ese token puede
+// ver, y cada sensor se auto-registra en D1 la primera vez que aparece —
+// nada de IDs a mano en un secret. sensor_index sintético 900000+ para no
+// chocar nunca con un sensor_index real de PurpleAir (ver migration_004).
+
+async function fetchAirGradientData(env) {
+  const url = `https://api.airgradient.com/public/api/v1/locations/measures/current?token=${env.AIRGRADIENT_API_TOKEN}`;
+  const resp = await fetch(url);
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`Error de la API de AirGradient (${resp.status}): ${text}`);
+  }
+  return resp.json();
+}
+
+// Reutiliza el sensor_index ya asignado a este serial si existe; si es la
+// primera vez que aparece, le asigna el próximo disponible en el rango
+// 900000+ (solo cuenta sensores AirGradient, nunca pisa un sensor_index de
+// PurpleAir).
+async function getOrAssignSensorIndex(env, serial) {
+  const existente = await env.DB.prepare(
+    `SELECT sensor_index FROM sensores WHERE serial_externo = ? AND proveedor = 'airgradient'`
+  )
+    .bind(serial)
+    .first();
+  if (existente) return existente.sensor_index;
+
+  const fila = await env.DB.prepare(
+    `SELECT COALESCE(MAX(sensor_index), 900000) + 1 AS siguiente
+     FROM sensores WHERE proveedor = 'airgradient'`
+  ).first();
+  return fila.siguiente;
+}
+
+async function upsertAirGradientSensor(env, sensorIndex, serial, loc) {
+  const nombre = loc.locationName || serial;
+  await env.DB.prepare(
+    `INSERT INTO sensores (sensor_index, nombre, latitud, longitud, proveedor, serial_externo)
+     VALUES (?, ?, ?, ?, 'airgradient', ?)
+     ON CONFLICT(sensor_index) DO UPDATE SET
+       nombre = excluded.nombre,
+       latitud = excluded.latitud,
+       longitud = excluded.longitud,
+       serial_externo = excluded.serial_externo`
+  )
+    .bind(sensorIndex, nombre, loc.latitude ?? null, loc.longitude ?? null, serial)
+    .run();
+}
+
+async function insertAirGradientLectura(env, sensorIndex, loc) {
+  // La API devuelve el timestamp como ISO 8601 ("2026-08-25T18:00:00.000Z");
+  // lo pasamos a "YYYY-MM-DD HH:MM:SS" para que quede en el mismo formato
+  // que usa la ingesta de PurpleAir (datetime(?, 'unixepoch')) en la columna.
+  if (!loc.timestamp) return;
+  const timestamp = loc.timestamp.replace("T", " ").replace(/\.\d+Z$/, "").replace(/Z$/, "");
+
+  // INSERT OR IGNORE + UNIQUE(sensor_index, timestamp): mismo mecanismo de
+  // dedupe que PurpleAir — si dos corridas traen el mismo timestamp para
+  // este sensor, la segunda no-opea en vez de crear una fila repetida.
+  await env.DB.prepare(
+    `INSERT OR IGNORE INTO lecturas (
+      sensor_index, timestamp, pm1_0, pm2_5, pm10_0, co2,
+      voc, temperatura, humedad, rssi
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  )
+    .bind(
+      sensorIndex,
+      timestamp,
+      loc.pm01 ?? null,
+      loc.pm02 ?? null,
+      loc.pm10 ?? null,
+      loc.rco2 ?? null,
+      loc.tvocIndex ?? null,
+      loc.atmpCompensated ?? loc.atmp ?? null,
+      loc.rhumCompensated ?? loc.rhum ?? null,
+      loc.wifi ?? null
+    )
+    .run();
+}
+
+async function ingestAirGradient(env) {
+  if (!env.AIRGRADIENT_API_TOKEN) {
+    return { ok: false, guardados: 0, error: "AIRGRADIENT_API_TOKEN no configurado" };
+  }
+
+  const data = await fetchAirGradientData(env);
+  if (!Array.isArray(data) || !data.length) {
+    return { ok: false, guardados: 0, error: "Sin datos de la API de AirGradient" };
+  }
+
+  // AIRGRADIENT_LOCATION_IDS (opcional): lista separada por comas de
+  // locationId a ingestar en ESTE dashboard. El token puede ver sensores que
+  // no son de la red de Saladillo (ej. uno instalado en la UTN La Plata) —
+  // sin este filtro, cualquier location visible con el token terminaría
+  // apareciendo en aq.lemeit.ar. Si la variable no está seteada, se ingestan
+  // todas (comportamiento por defecto, útil solo si el token ya está
+  // acotado a los sensores correctos del lado de AirGradient).
+  const permitidas = (env.AIRGRADIENT_LOCATION_IDS || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const locations = permitidas.length
+    ? data.filter((loc) => permitidas.includes(String(loc.locationId)))
+    : data;
+
+  if (!locations.length) {
+    return {
+      ok: false,
+      guardados: 0,
+      error: "Ninguna location de la API coincide con AIRGRADIENT_LOCATION_IDS",
+    };
+  }
+
+  let guardados = 0;
+  const errores = [];
+  for (const loc of locations) {
+    const serial = loc.serialno || String(loc.locationId);
+    try {
+      const sensorIndex = await getOrAssignSensorIndex(env, serial);
+      await upsertAirGradientSensor(env, sensorIndex, serial, loc);
+      await insertAirGradientLectura(env, sensorIndex, loc);
+      guardados++;
+    } catch (err) {
+      errores.push(`AirGradient ${serial}: ${err.message}`);
+    }
+  }
+  return { ok: errores.length === 0, guardados, total: locations.length, errores };
+}
+
 // ── API de lectura (sin cambios) ────────────────────────────────────────────
 
 const CORS_HEADERS = {
@@ -209,6 +345,17 @@ export default {
         return json(resultado, resultado.ok ? 200 : 502);
       }
 
+      // Mismo patrón que /api/ingest-ahora, pero solo para AirGradient — separado
+      // a propósito para poder probar/depurar cada proveedor sin pisar al otro.
+      if (path === "/api/ingest-ahora-airgradient" && request.method === "POST") {
+        const key = request.headers.get("X-Ingest-Key");
+        if (!env.INGEST_KEY || key !== env.INGEST_KEY) {
+          return json({ error: "No autorizado" }, 401);
+        }
+        const resultado = await ingestAirGradient(env);
+        return json(resultado, resultado.ok ? 200 : 502);
+      }
+
       return json({ error: "Not found" }, 404);
     } catch (err) {
       return json({ error: err.message }, 500);
@@ -217,15 +364,26 @@ export default {
 
   // Cron Trigger (ver [triggers] en wrangler.toml) — reemplaza al cron de
   // GitHub Actions como disparador de la ingesta cada 15 minutos.
+  // Corre PurpleAir y AirGradient en paralelo — son independientes, si uno
+  // falla no afecta al otro (cada uno atrapa su propio error).
   async scheduled(event, env, ctx) {
     ctx.waitUntil(
-      ingest(env)
-        .then((resultado) => {
-          console.log(`Ingesta programada: ${JSON.stringify(resultado)}`);
-        })
-        .catch((err) => {
-          console.error(`Fallo la ingesta programada: ${err.message}`);
-        })
+      Promise.all([
+        ingest(env)
+          .then((resultado) => {
+            console.log(`Ingesta PurpleAir: ${JSON.stringify(resultado)}`);
+          })
+          .catch((err) => {
+            console.error(`Fallo la ingesta de PurpleAir: ${err.message}`);
+          }),
+        ingestAirGradient(env)
+          .then((resultado) => {
+            console.log(`Ingesta AirGradient: ${JSON.stringify(resultado)}`);
+          })
+          .catch((err) => {
+            console.error(`Fallo la ingesta de AirGradient: ${err.message}`);
+          }),
+      ])
     );
   },
 };

@@ -1,14 +1,16 @@
-# Aire Saladillo — Red de Sensores PurpleAir
+# Aire Saladillo — Red de Sensores PurpleAir + AirGradient
 
-Sistema de adquisición y visualización de calidad de aire (material particulado PM2.5/PM10) a partir de sensores PurpleAir instalados en escuelas y jardines de infantes de Saladillo, Buenos Aires, Argentina. Publicado en [aq.lemeit.ar](https://aq.lemeit.ar).
+Sistema de adquisición y visualización de calidad de aire (material particulado PM2.5/PM10, y desde agosto 2026 también CO2) a partir de sensores de bajo costo **PurpleAir** y **AirGradient** instalados en escuelas, jardines de infantes y domicilios de Saladillo, Buenos Aires, Argentina. Publicado en [aq.lemeit.ar](https://aq.lemeit.ar).
 
 Es uno de tres proyectos de monitoreo ambiental que comparten la misma infraestructura de Cloudflare (Pages + Workers + D1), pensados para integrarse a futuro: [emas.lemeit.ar](https://emas.lemeit.ar) (meteorología), este (calidad del aire) y [wq.lemeit.ar](https://wq.lemeit.ar) (calidad del agua).
 
 ## Sensores
 
-Cada sensor físico se registra en la tabla `sensores` (nombre, institución, coordenadas, estado activo/inactivo), independiente de la serie de lecturas — así se pueden dar de baja o agregar sensores sin perder el historial. El listado de instituciones vivas se administra desde ahí, no está hardcodeado en el dashboard.
+Cada sensor físico se registra en la tabla `sensores` (nombre, institución, coordenadas, estado activo/inactivo, proveedor), independiente de la serie de lecturas — así se pueden dar de baja o agregar sensores sin perder el historial. El listado de instituciones vivas se administra desde ahí, no está hardcodeado en el dashboard.
 
-**Flota (agosto 2026)**: el autor tiene 5 unidades PurpleAir Flex en total. Una sola está instalada y activa online hoy; las otras 4 están pendientes de instalación/configuración en distintas instituciones. Como todo el hardware es Flex (sensor de gas BME688 incluido), el campo VOC debería poblarse en todos los sensores a medida que se vayan sumando — no es una excepción de un solo sensor.
+**Flota PurpleAir (agosto 2026)**: el autor tiene 5 unidades PurpleAir Flex en total. Una sola está instalada y activa online hoy; las otras 4 están pendientes de instalación/configuración en distintas instituciones. Como todo el hardware es Flex (sensor de gas BME688 incluido), el campo VOC debería poblarse en todos los sensores a medida que se vayan sumando — no es una excepción de un solo sensor.
+
+**Flota AirGradient (agosto 2026)**: el autor tiene 3 unidades AirGradient en total, pero solo 2 corresponden a la red de Saladillo (la tercera está instalada en la UTN La Plata, otra institución/ciudad, y queda excluida del dashboard vía `AIRGRADIENT_LOCATION_IDS` — ver más abajo). De las 2 de Saladillo, una está en interior (domicilio del autor, ya reportando) y la otra (kit DIY) todavía no está instalada — la ubicación actual en el mapa es provisoria hasta que se defina dónde va a quedar montada. A diferencia de PurpleAir, AirGradient sí mide **CO2** (sensor NDIR), que se suma como parámetro nuevo en tarjetas, gráfico, mapa e historial.
 
 ## Arquitectura
 
@@ -35,6 +37,18 @@ Dashboard HTML estático (Cloudflare Pages) — aq.lemeit.ar
 
 **Solución actual — triple redundancia.** En vez de esperar a que Cloudflare lo resuelva, se reactivó el `schedule:` de GitHub Actions (ahora en minutos :07/:22/:37/:52, para no coincidir con los de Cloudflare) y se sumó un tercer disparador externo, **cron-job.org**, que hace `POST /api/ingest-ahora` en los minutos :12/:27/:42/:57. Los tres quedan corriendo en paralelo — el `INSERT OR IGNORE` + el índice `UNIQUE(sensor_index, timestamp)` en `lecturas` (ver "Base de datos" más abajo) garantiza que no se dupliquen filas aunque dos o los tres disparen casi al mismo tiempo. El Cron Trigger de Cloudflare se dejó configurado (no cuesta nada tenerlo) por si el bug se resuelve solo del lado de ellos; conviene revisar de vez en cuando la pestaña **Observability** del Worker en el dashboard de Cloudflare (`worker/wrangler.toml` tiene `[observability.logs] enabled = true` para que esos logs queden guardados) — si algún día aparece ahí un evento de cron exitoso, es la señal de que se puede volver a simplificar sacando GitHub Actions y/o cron-job.org.
 
+## Integración AirGradient (agosto 2026)
+
+Además de PurpleAir, el Worker ahora ingesta datos de sensores **AirGradient** contra su propia API pública (`GET /public/api/v1/locations/measures/current?token=...`, que devuelve en una sola llamada todas las ubicaciones visibles para ese token — no hace falta enumerar cada `locationId` en el código).
+
+**Esquema unificado, sin repo aparte.** En vez de un portal separado, los sensores AirGradient se guardan en las mismas tablas `sensores`/`lecturas` que PurpleAir (ver `migration_004_airgradient.sql`), para que el dashboard los muestre juntos y el usuario no tenga que ir y venir entre dos sitios. Como `sensor_index` sigue siendo el `INTEGER PRIMARY KEY` de siempre y los sensores AirGradient no tienen un equivalente numérico propio, el Worker les asigna automáticamente un ID sintético en el rango 900000+ la primera vez que ve un `serialno` nuevo (columna `serial_externo`, para reconocerlo en corridas siguientes sin volver a asignarle otro número). La columna `proveedor` (`'purpleair'` | `'airgradient'`) distingue el origen de cada fila.
+
+**Filtro por `AIRGRADIENT_LOCATION_IDS`.** El token del autor puede ver sensores que no son de la red de Saladillo (uno está en la UTN La Plata, otra institución/ciudad) — sin filtro, ese sensor aparecería igual en el dashboard de Saladillo. El secret `AIRGRADIENT_LOCATION_IDS` (lista de `locationId` separados por coma) restringe la ingesta a los sensores correctos; si no está seteado, el Worker ingesta todo lo que el token pueda ver (pensado como fallback, útil solo si el token ya está acotado de entrada). Nota: este filtro solo afecta ingestas *nuevas* — no borra retroactivamente filas ya guardadas antes de activarlo (hubo que limpiar a mano con `DELETE FROM lecturas/sensores WHERE sensor_index = ...` una vez que esto pasó en la práctica).
+
+**Endpoint de prueba/backfill**: `POST /api/ingest-ahora-airgradient`, mismo esquema de auth que `/api/ingest-ahora` (header `X-Ingest-Key`). El `scheduled()` del Worker corre la ingesta de PurpleAir y de AirGradient en paralelo (`Promise.all`), cada una con su propio try/catch para que una falla en un proveedor no tumbe al otro.
+
+**CO2 en el dashboard**: PurpleAir no mide CO2 (su BME68x da VOC, no CO2 real); AirGradient sí, vía sensor NDIR. El campo `co2` se agregó como parámetro más en el selector multi-parámetro del gráfico, como capa nueva en el mapa, como columna condicional en la tabla de historial y como tarjeta métrica adicional en las cards — todos siguiendo el mismo patrón "oculto salvo que el sensor lo reporte" que ya existía para VOC.
+
 ## Ingesta
 
 Los tres caminos automáticos hacen lo mismo (consultar `api.purpleair.com/v1/sensors` y guardar en D1) y corren en paralelo sin riesgo de duplicar datos — ver la nota de dedupe en "Base de datos" más abajo.
@@ -57,16 +71,21 @@ pip install requests
 **Worker** (`wrangler secret put`, dentro de `worker/`):
 
 ```
-PURPLEAIR_API_KEY   # API key de lectura de develop.purpleair.com
-SENSOR_INDEXES      # lista separada por comas, ej: "12345,67890"
-INGEST_KEY          # clave propia para disparar POST /api/ingest-ahora — usada
-                     # también por cron-job.org (ver Historia de la ingesta arriba).
-                     # Rotada en agosto 2026 (la anterior era corta y quedó
-                     # expuesta en una charla de diagnóstico). Cloudflare no
-                     # permite leer secrets ya guardados — para verificar que
-                     # el valor actual es correcto, la forma es pegarle a
-                     # POST /api/ingest-ahora y confirmar que responde
-                     # {"ok":true,...} en vez de 401.
+PURPLEAIR_API_KEY        # API key de lectura de develop.purpleair.com
+SENSOR_INDEXES           # lista separada por comas, ej: "12345,67890"
+INGEST_KEY               # clave propia para disparar POST /api/ingest-ahora — usada
+                          # también por cron-job.org (ver Historia de la ingesta arriba).
+                          # Rotada en agosto 2026 (la anterior era corta y quedó
+                          # expuesta en una charla de diagnóstico). Cloudflare no
+                          # permite leer secrets ya guardados — para verificar que
+                          # el valor actual es correcto, la forma es pegarle a
+                          # POST /api/ingest-ahora y confirmar que responde
+                          # {"ok":true,...} en vez de 401.
+AIRGRADIENT_API_TOKEN     # token de la API pública de AirGradient (dashboard → Place settings)
+AIRGRADIENT_LOCATION_IDS  # lista separada por comas de locationId a ingestar — filtra
+                          # sensores fuera de la red de Saladillo (ver "Integración
+                          # AirGradient" arriba). Si no está seteado, ingesta todo lo
+                          # que el token pueda ver.
 ```
 
 `worker/wrangler.toml` también tiene un bloque `[observability]` con `logs.enabled = true` (activado en agosto 2026 para diagnosticar el problema del Cron Trigger) — no es un secret, pero cualquier cambio ahí necesita `wrangler deploy` para tomar efecto, un toggle desde el dashboard solo no alcanza.
@@ -106,7 +125,8 @@ El Worker `worker/src/index.js` expone:
 | `GET /api/sensores` | Metadata de todos los sensores activos |
 | `GET /api/ultimas` | Última lectura de cada sensor |
 | `GET /api/historico/:sensor_index?range=24h\|7d\|30d` | Historial de un sensor, filtrado por ventana de tiempo real (no por cantidad de filas) |
-| `POST /api/ingest-ahora` | Dispara una corrida de ingesta manual. Requiere header `X-Ingest-Key` con el secret `INGEST_KEY` — sin la clave correcta devuelve 401 |
+| `POST /api/ingest-ahora` | Dispara una corrida de ingesta manual de PurpleAir. Requiere header `X-Ingest-Key` con el secret `INGEST_KEY` — sin la clave correcta devuelve 401 |
+| `POST /api/ingest-ahora-airgradient` | Dispara una corrida de ingesta manual de AirGradient. Mismo esquema de auth que el endpoint anterior |
 
 ## Proyecto educativo
 
@@ -117,8 +137,10 @@ Ing. Luciano Lamaita — docente de Física y Química en Saladillo, Buenos Aire
 
 Ideas pendientes de evaluar e implementar, anotadas para no perderlas entre sesiones:
 
-- ~~**Selector de parámetros en la pestaña "Gráfico"**~~ — implementado: checkboxes para elegir qué parámetros graficar superpuestos (PM2.5, PM1.0, PM10, Temp, Humedad, Presión, VOC), cada uno con su propio eje Y independiente vía `yAxisID`.
-- **Sensores AirGradient / Clarity (a futuro)**: los sensores PurpleAir actuales no miden CO2. Como parte del proyecto de ciencia ciudadana descripto abajo, está prevista la instalación de un monitor **AirGradient Open Air** (WiFi, mide material particulado, temperatura y humedad, con posibilidad de sumar CO2) y un monitor **Clarity Node-S** (solar, transmisión celular) en dos instituciones educativas. Cuando se integren, van a necesitar su propia ingesta (adaptar `ingest_purpleair.py` o sumar un script nuevo) y su columna en `lecturas` — ahí es donde el selector multi-parámetro ya implementado se vuelve útil, para poder cruzar CO2 con temperatura o con PM2.5 en el mismo gráfico.
+- ~~**Selector de parámetros en la pestaña "Gráfico"**~~ — implementado: checkboxes para elegir qué parámetros graficar superpuestos (PM2.5, PM1.0, PM10, Temp, Humedad, Presión, VOC, CO2), cada uno con su propio eje Y independiente vía `yAxisID`.
+- ~~**Sensores AirGradient (a futuro)**~~ — implementado en agosto 2026: ver "Integración AirGradient" arriba. Sigue pendiente instalar en su ubicación definitiva el segundo sensor de Saladillo (kit DIY) y, más adelante, evaluar sumar un monitor **Clarity Node-S** (solar, transmisión celular) con el mismo esquema `proveedor`/`serial_externo` ya armado para AirGradient.
+- **Nombres institucionales para los sensores AirGradient**: hoy `institucion` queda en `NULL` para ambos (el dashboard cae al `locationName` crudo de AirGradient, ej. "84fce606ed88_Saladillo_Centro"). Cosmético, no bloquea nada — actualizar a mano en la tabla `sensores` cuando haya tiempo.
+- **Logos de atribución (OpenAQ, PurpleAir, AirGradient)**: sumar los logos de las redes/programas de los que el autor participa en los tres portales hermanos (posiblemente en el footer compartido `lemeit-common.js` y/o en la sección "Acerca de" de cada uno), y reflejarlo también en los proyectos correspondientes de profe.lemeit.ar. Pendiente, sin apuro.
 - **Simplificar la triple redundancia de ingesta**: hoy corren tres disparadores en paralelo (Cloudflare, GitHub Actions, cron-job.org) porque el Cron Trigger de Cloudflare quedó registrado pero sin disparar nunca `scheduled()` — ver "Historia de la ingesta automática" arriba. Revisar de tanto en tanto la pestaña Observability del Worker; si el Cron Trigger empieza a aparecer ahí disparando con éxito, evaluar sacar GitHub Actions y/o cron-job.org para volver a un solo camino. No hay apuro — los tres conviven sin duplicar datos.
 
 ## Contexto institucional y proyectos futuros

@@ -610,6 +610,7 @@
           <option value="humedad">Capa: Humedad</option>
           <option value="presion">Capa: Presión</option>
           <option value="voc">Capa: VOC</option>
+          <option value="co2">Capa: CO2</option>
         </select>
       </div>
       <div id="mapa-container"></div>
@@ -664,8 +665,9 @@
     humedad: { label: "Humedad", unit: "%", color: "#4FB0C6" },
     presion: { label: "Presión", unit: "hPa", color: "#A88FD9" },
     voc: { label: "VOC", unit: "", color: "#D9736F" },
+    co2: { label: "CO2", unit: "ppm", color: "#6FA8D9" },
   };
-  const CHART_PARAM_ORDER = ["pm2_5", "pm1_0", "pm10_0", "temperatura", "humedad", "presion", "voc"];
+  const CHART_PARAM_ORDER = ["pm2_5", "pm1_0", "pm10_0", "temperatura", "humedad", "presion", "voc", "co2"];
 
   // Los 3 parámetros de material particulado vienen del mismo par de láseres
   // Plantower (canal A y canal B) — el valor "normal" que se grafica es el
@@ -683,9 +685,10 @@
     box.innerHTML = CHART_PARAM_ORDER.map((key) => {
       const def = CHART_PARAM_DEFS[key];
       const checked = key === "pm2_5" ? "checked" : "";
-      // VOC arranca oculto: recién se muestra si el sensor seleccionado lo
-      // reporta (ver loadHistory(), igual criterio que en la tarjeta y el mapa).
-      const hidden = key === "voc" ? ' style="display:none"' : "";
+      // VOC y CO2 arrancan ocultos: recién se muestran si el sensor
+      // seleccionado los reporta (ver loadHistory(), igual criterio que en
+      // la tarjeta y el mapa). CO2 solo lo reportan sensores AirGradient.
+      const hidden = (key === "voc" || key === "co2") ? ' style="display:none"' : "";
       return `<label class="param-toggle-item" data-param="${key}"${hidden}>
         <input type="checkbox" class="chart-param-cb" value="${key}" ${checked}>
         <span class="param-toggle-swatch" style="background:${def.color}"></span>${def.label}
@@ -877,6 +880,7 @@
     humedad: { label: "Humedad", unit: "%", get: (s) => s.humedad },
     presion: { label: "Presión", unit: "hPa", get: (s) => s.presion },
     voc: { label: "VOC", unit: "", get: (s) => s.voc },
+    co2: { label: "CO2", unit: "ppm", get: (s) => s.co2 },
   };
 
   function interpolateColorRel(t) {
@@ -978,12 +982,17 @@
 
     // La opción "VOC" del selector solo tiene sentido si algún sensor visible
     // la reporta (PurpleAir Flex/Zen/Touch) — se oculta si no, sin borrar la
-    // selección si el usuario ya la tenía elegida.
+    // selección si el usuario ya la tenía elegida. Mismo criterio para "CO2"
+    // (solo lo reportan sensores AirGradient).
     const selParam = document.getElementById("sel-mapa-param");
     const vocOption = selParam.querySelector('option[value="voc"]');
     const hayVoc = latestSensors.some((s) => s.voc != null);
     if (vocOption) vocOption.style.display = hayVoc ? "" : "none";
     if (!hayVoc && selParam.value === "voc") selParam.value = "aqi";
+    const co2Option = selParam.querySelector('option[value="co2"]');
+    const hayCo2 = latestSensors.some((s) => s.co2 != null);
+    if (co2Option) co2Option.style.display = hayCo2 ? "" : "none";
+    if (!hayCo2 && selParam.value === "co2") selParam.value = "aqi";
     const param = selParam.value || "aqi";
 
     if (!conCoords.length) {
@@ -1116,6 +1125,11 @@
               <div class="metric">
                 <div class="metric-value">${s.voc}</div>
                 <div class="metric-label">VOC</div>
+              </div>` : ""}
+              ${s.co2 != null ? `
+              <div class="metric">
+                <div class="metric-value">${s.co2} ppm</div>
+                <div class="metric-label">CO2</div>
               </div>` : ""}
             </div>
             <div class="card-sub" style="margin-top:12px; padding-top:12px; border-top:1px solid var(--border);">
@@ -1250,12 +1264,20 @@
       // El checkbox de VOC solo tiene sentido si el sensor seleccionado lo
       // reporta (PurpleAir Flex/Zen/Touch) — se oculta y se destilda si no,
       // mismo criterio que en la tarjeta y en el selector de capa del mapa.
+      // CO2 sigue el mismo criterio (solo lo reportan sensores AirGradient).
       const vocItem = document.querySelector('#param-toggle [data-param="voc"]');
       if (vocItem) {
         const hasVoc = currentRows.some((r) => r.voc != null);
         vocItem.style.display = hasVoc ? "" : "none";
         const vocCb = vocItem.querySelector("input");
         if (!hasVoc && vocCb.checked) vocCb.checked = false;
+      }
+      const co2Item = document.querySelector('#param-toggle [data-param="co2"]');
+      if (co2Item) {
+        const hasCo2 = currentRows.some((r) => r.co2 != null);
+        co2Item.style.display = hasCo2 ? "" : "none";
+        const co2Cb = co2Item.querySelector("input");
+        if (!hasCo2 && co2Cb.checked) co2Cb.checked = false;
       }
 
       renderChart(currentRows);
@@ -1277,7 +1299,9 @@
       }
       // VOC solo lo reportan algunos sensores (PurpleAir Flex/Zen/Touch) —
       // mostramos esa columna únicamente si hay al menos un dato en el rango.
+      // CO2 sigue el mismo criterio (solo sensores AirGradient).
       const hasVoc = rows.some((r) => r.voc != null);
+      const hasCo2 = rows.some((r) => r.co2 != null);
       const filas = rows.slice().reverse().map((r) => `<tr>
           <td class="muted">${formatBsAsFull(r.timestamp)}</td>
           <td class="num">${r.pm2_5 ?? "—"}</td>
@@ -1285,10 +1309,11 @@
           <td>${r.humedad ?? "—"}</td>
           <td>${r.presion ?? "—"}</td>
           ${hasVoc ? `<td>${r.voc ?? "—"}</td>` : ""}
+          ${hasCo2 ? `<td>${r.co2 ?? "—"}</td>` : ""}
         </tr>`).join("");
       document.getElementById("tabla-wrap").innerHTML = `
         <table>
-          <thead><tr><th>Fecha / hora</th><th>PM2.5 (µg/m³)</th><th>Temp. (°C)</th><th>Humedad (%)</th><th>Presión (hPa)</th>${hasVoc ? "<th>VOC</th>" : ""}</tr></thead>
+          <thead><tr><th>Fecha / hora</th><th>PM2.5 (µg/m³)</th><th>Temp. (°C)</th><th>Humedad (%)</th><th>Presión (hPa)</th>${hasVoc ? "<th>VOC</th>" : ""}${hasCo2 ? "<th>CO2 (ppm)</th>" : ""}</tr></thead>
           <tbody>${filas}</tbody>
         </table>`;
     } catch (e) {
@@ -1403,7 +1428,7 @@
 
   function exportCsv() {
     if (!currentRows.length) return;
-    const headers = ["timestamp_utc", "pm1_0", "pm2_5", "pm2_5_a", "pm2_5_b", "pm10_0", "temperatura_c", "humedad", "presion", "voc", "rssi"];
+    const headers = ["timestamp_utc", "pm1_0", "pm2_5", "pm2_5_a", "pm2_5_b", "pm10_0", "temperatura_c", "humedad", "presion", "voc", "co2", "rssi"];
     const lines = [headers.join(",")];
     currentRows.forEach((r) => {
       lines.push(headers.map((h) => r[h.replace("_utc", "").replace("_c", "")] ?? "").join(","));
