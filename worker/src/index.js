@@ -212,6 +212,7 @@ async function insertAirGradientLectura(env, sensorIndex, loc) {
       loc.pm10 ?? null,
       loc.rco2 ?? null,
       loc.tvocIndex ?? null,
+      loc.noxIndex ?? null,
       loc.atmpCompensated ?? loc.atmp ?? null,
       loc.rhumCompensated ?? loc.rhum ?? null,
       loc.wifi ?? null
