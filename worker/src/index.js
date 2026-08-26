@@ -202,7 +202,7 @@ async function insertAirGradientLectura(env, sensorIndex, loc) {
     `INSERT OR IGNORE INTO lecturas (
       sensor_index, timestamp, pm1_0, pm2_5, pm10_0, co2,
       voc, temperatura, humedad, rssi
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   )
     .bind(
       sensorIndex,
