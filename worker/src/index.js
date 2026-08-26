@@ -8,26 +8,18 @@
  * inyecta de forma segura en tiempo de ejecución.
  *
  * Endpoints:
- *   GET /api/sensores          -> metadata de todos los sensores (cualquier proveedor)
+ *   GET /api/sensores        -> metadata de todos los sensores (cualquier proveedor)
  *   GET /api/ultimas           -> última lectura de cada sensor (vista v_ultima_lectura)
  *   GET /api/historico/:index  -> historial de un sensor (últimas 200 lecturas)
  *
  * Ingesta (scheduled, ver [triggers] en wrangler.toml): reemplazó al cron de
  * GitHub Actions (`.github/workflows/purpleair-ingest.yml`) como camino
- * principal para PurpleAir — aunque terminó necesitando volver a sumarse
- * como respaldo por un problema del lado de Cloudflare (ver README.md →
- * "Historia de la ingesta automática"). ingest_purpleair.py se mantiene en
- * el repo como referencia / para correr ingestas puntuales a mano.
+ * principal para PurpleAir.
  *
- * AirGradient (agosto 2026) se sumó directo acá, sin script Python propio:
- * ver ingestAirGradient() más abajo — usa la API pública de AirGradient
- * (secret AIRGRADIENT_API_TOKEN) y auto-registra cada sensor nuevo que
- * aparece, sin necesitar una lista de IDs a mano.
+ * AirGradient (agosto 2026) consulta los proyectos de "OpenAQ Ambassadors"
+ * y "Saladillo" de forma independiente utilizando secretos de Cloudflare.
  */
-/**
- * API de solo lectura + ingesta programada para la red de sensores de aire de
- * Saladillo (aq.lemeit.ar) — PurpleAir y AirGradient unificados en D1.
- */
+
 // ── Ingesta PurpleAir → D1 ─────────────────────────────────────────────────
 
 const PURPLEAIR_FIELDS =
@@ -138,13 +130,39 @@ async function ingest(env) {
 // ── Ingesta AirGradient → D1 ─────────────────────────────────────────────────
 
 async function fetchAirGradientData(env) {
-  const url = `https://api.airgradient.com/public/api/v1/locations/measures/current?token=${env.AIRGRADIENT_API_TOKEN}`;
-  const resp = await fetch(url);
-  if (!resp.ok) {
-    const text = await resp.text();
-    throw new Error(`Error de la API de AirGradient (${resp.status}): ${text}`);
+  const tokens = [];
+
+  if (env.AIRGRADIENT_TOKEN_OPENAQ) {
+    tokens.push({ name: "OpenAQ Ambassadors", token: env.AIRGRADIENT_TOKEN_OPENAQ });
   }
-  return resp.json();
+  if (env.AIRGRADIENT_TOKEN_SALADILLO) {
+    tokens.push({ name: "Saladillo", token: env.AIRGRADIENT_TOKEN_SALADILLO });
+  }
+
+  if (!tokens.length) {
+    throw new Error("No hay secretos configurados para AirGradient (AIRGRADIENT_TOKEN_OPENAQ o AIRGRADIENT_TOKEN_SALADILLO)");
+  }
+
+  let todasLasLocations = [];
+
+  for (const item of tokens) {
+    try {
+      const url = `https://api.airgradient.com/public/api/v1/locations/measures/current?token=${item.token}`;
+      const resp = await fetch(url);
+      if (resp.ok) {
+        const data = await resp.json();
+        if (Array.isArray(data)) {
+          todasLasLocations = todasLasLocations.concat(data);
+        }
+      } else {
+        console.error(`Error en token ${item.name} (${resp.status})`);
+      }
+    } catch (err) {
+      console.error(`Error consultando token ${item.name}: ${err.message}`);
+    }
+  }
+
+  return todasLasLocations;
 }
 
 async function getOrAssignSensorIndex(env, serial) {
@@ -202,10 +220,6 @@ async function insertAirGradientLectura(env, sensorIndex, loc) {
 }
 
 async function ingestAirGradient(env) {
-  if (!env.AIRGRADIENT_API_TOKEN) {
-    return { ok: false, guardados: 0, error: "AIRGRADIENT_API_TOKEN no configurado" };
-  }
-
   const data = await fetchAirGradientData(env);
   if (!Array.isArray(data) || !data.length) {
     return { ok: false, guardados: 0, error: "Sin datos de la API de AirGradient" };
