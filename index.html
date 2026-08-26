@@ -390,11 +390,13 @@
   }
 
   /* ── Atribución (pestaña Acerca de): logos de las redes/programas de los
-     que participa el proyecto. Cada logo va en un chip con el fondo que
-     necesita para leerse bien — el de PurpleAir es un recorte blanco sin
-     versión de color, así que necesita fondo oscuro fijo; los otros dos
-     están pensados para fondo claro. El fondo del chip es fijo (no sigue el
-     tema claro/oscuro del sitio) justamente para no depender de eso. */
+     que participa el proyecto. Cada logo va en un chip con fondo claro fijo
+     (no sigue el tema claro/oscuro del sitio) para que se lea igual siempre.
+     PurpleAir usa una versión recoloreada a su morado de marca (#a4a) a
+     partir del recorte blanco original — el blanco puro queda guardado
+     aparte como purpleair-white.png por si hace falta sobre fondo oscuro
+     en algún otro lugar. .attrib-chip-dark queda definido igual por si se
+     necesita en el futuro para algún logo que sí sea blanco-sobre-transparente. */
   .acerca-attrib {
     margin-top: 16px;
     padding-top: 14px;
@@ -675,7 +677,7 @@
           <a href="https://openaq.org" target="_blank" class="attrib-chip attrib-chip-light" title="OpenAQ — el autor es Embajador Comunitario desde 2023">
             <img src="https://design.lemeit.ar/logos/openaq.svg" alt="OpenAQ" height="20">
           </a>
-          <a href="https://www.purpleair.com" target="_blank" class="attrib-chip attrib-chip-dark" title="PurpleAir">
+          <a href="https://www.purpleair.com" target="_blank" class="attrib-chip attrib-chip-light" title="PurpleAir">
             <img src="https://design.lemeit.ar/logos/purpleair.png" alt="PurpleAir" height="20">
           </a>
           <a href="https://www.airgradient.com" target="_blank" class="attrib-chip attrib-chip-light" title="AirGradient">
