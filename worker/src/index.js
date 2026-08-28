@@ -293,7 +293,7 @@ export default {
 
       if (path === "/api/ultimas") {
         const { results } = await env.DB.prepare(
-          `SELECT l.*, s.nombre, s.institucion, s.latitud, s.longitud
+          `SELECT l.*, s.nombre, s.institucion, s.latitud, s.longitud, s.proveedor
            FROM v_ultima_lectura l
            JOIN sensores s ON s.sensor_index = l.sensor_index`
         ).all();

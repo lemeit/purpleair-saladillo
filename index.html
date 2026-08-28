@@ -283,6 +283,26 @@
     opacity: .6;
   }
 
+  /* Insignia con el logo del proveedor del sensor (PurpleAir/AirGradient),
+     apoyada sobre el borde inferior de la tarjeta — .card-front es
+     position:relative, así que se ancla a esa cara sin afectar el layout. */
+  .card-provider-badge {
+    position: absolute;
+    bottom: 8px;
+    right: 8px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,.3);
+    overflow: hidden;
+    z-index: 1;
+  }
+  .card-provider-badge img { width: 68%; height: 68%; object-fit: contain; }
+
   .card-top {
     display: flex;
     justify-content: space-between;
@@ -442,6 +462,11 @@
     color: var(--text-dim); text-align: left; padding: 8px 14px;
     border-bottom: 1px solid var(--border); background: var(--bg-panel-hover);
   }
+  /* Las unidades entre paréntesis de cada encabezado (µg/m³, hPa, ppm...) no
+     deben pasar por el text-transform:uppercase de arriba — rompe el formato
+     SI de los símbolos en minúscula (kg, m, s, h, cm, g, etc.). Este span
+     revierte la transformación solo para esa parte del texto. */
+  .th-unit { text-transform: none; }
   td { font-family: var(--font-display); font-size: 12px; padding: 7px 14px; border-bottom: 1px solid var(--border); color: var(--text); }
   tr:last-child td { border-bottom: none; }
   tr:hover td { background: var(--bg-panel-hover); }
@@ -668,15 +693,17 @@
       </p>
       <div class="acerca-attrib">
         <div class="acerca-attrib-label">Redes y programas de los que este proyecto participa</div>
-        <div class="lm-attrib-row">
+        <!-- lm-attrib-row-lg: logos más grandes que los del footer (lm-attrib-row-sm)
+             para diferenciar este panel institucional del pie de página. -->
+        <div class="lm-attrib-row lm-attrib-row-lg">
           <a href="https://openaq.org" target="_blank" class="lm-attrib-chip" title="OpenAQ — el autor es Embajador Comunitario desde 2023">
-            <img src="https://design.lemeit.ar/logos/openaq.svg" alt="OpenAQ" height="20">
+            <img src="https://design.lemeit.ar/logos/openaq.svg" alt="OpenAQ" height="32">
           </a>
           <a href="https://www.purpleair.com" target="_blank" class="lm-attrib-chip" title="PurpleAir">
-            <img src="https://design.lemeit.ar/logos/purpleair.png" alt="PurpleAir" height="20">
+            <img src="https://design.lemeit.ar/logos/purpleair.png" alt="PurpleAir" height="32">
           </a>
           <a href="https://www.airgradient.com" target="_blank" class="lm-attrib-chip" title="AirGradient">
-            <img src="https://design.lemeit.ar/logos/airgradient.svg" alt="AirGradient" height="20">
+            <img src="https://design.lemeit.ar/logos/airgradient.svg" alt="AirGradient" height="32">
           </a>
         </div>
       </div>
@@ -701,6 +728,16 @@
   let mapaInst = null;
   let mapaTileLayer = null;
 
+  // Insignia de proveedor en el borde inferior de cada tarjeta (Actuales y
+  // Mapa) — usa la columna "proveedor" que devuelve /api/ultimas. Si todavía
+  // no está poblada para algún sensor viejo de PurpleAir, se asume
+  // "purpleair" por default (todo lo que no sea explícitamente AirGradient
+  // llegó por esa vía históricamente).
+  const PROVIDER_BADGE = {
+    purpleair: { src: "https://design.lemeit.ar/logos/purpleair.png", label: "PurpleAir", href: "https://www.purpleair.com" },
+    airgradient: { src: "https://design.lemeit.ar/logos/airgradient.svg", label: "AirGradient", href: "https://www.airgradient.com" },
+  };
+
   // ── Selector multi-parámetro (pestaña Gráfico) ──
   // Cada parámetro tiene su propia escala Y (yAxisID) para poder superponer,
   // por ej., PM2.5 con Temperatura sin que una aplaste la otra al compartir
@@ -712,9 +749,12 @@
     temperatura: { label: "Temp.", unit: "°C", color: "#5B8DEF" },
     humedad: { label: "Humedad", unit: "%", color: "#4FB0C6" },
     presion: { label: "Presión", unit: "hPa", color: "#A88FD9" },
-    voc: { label: "VOC", unit: "", color: "#D9736F" },
+    // VOC y NOx no tienen unidad física propia: el sensor reporta un índice
+    // relativo (0–500 aprox.), no una concentración — se etiqueta como
+    // "índice" en vez de dejarlos sin aclaración junto al resto de parámetros.
+    voc: { label: "VOC", unit: "índice", color: "#D9736F" },
     co2: { label: "CO2", unit: "ppm", color: "#6FA8D9" },
-    nox: { label: "NOx", unit: "", color: "#B8D94F" },
+    nox: { label: "NOx", unit: "índice", color: "#B8D94F" },
   };
   const CHART_PARAM_ORDER = ["pm2_5", "pm1_0", "pm10_0", "temperatura", "humedad", "presion", "voc", "co2", "nox"];
 
@@ -928,9 +968,9 @@
     temperatura: { label: "Temperatura", unit: "°C", get: (s) => s.temperatura },
     humedad: { label: "Humedad", unit: "%", get: (s) => s.humedad },
     presion: { label: "Presión", unit: "hPa", get: (s) => s.presion },
-    voc: { label: "VOC", unit: "", get: (s) => s.voc },
+    voc: { label: "VOC", unit: "índice", get: (s) => s.voc },
     co2: { label: "CO2", unit: "ppm", get: (s) => s.co2 },
-    nox: { label: "NOx", unit: "", get: (s) => s.nox },
+    nox: { label: "NOx", unit: "índice", get: (s) => s.nox },
   };
 
   function interpolateColorRel(t) {
@@ -963,12 +1003,20 @@
     return interpolateColorRel((val - domain.min) / (domain.max - domain.min));
   }
 
+  // VOC/NOx no tienen una unidad física (son un índice del sensor, no una
+  // concentración) — en vez de pegarles "índice" como si fuera una unidad
+  // más (quedaría "42 índice"), se muestran aclarados entre paréntesis.
+  function unitSuffix(def) {
+    if (!def.unit) return "";
+    return def.unit === "índice" ? " (índice)" : ` ${def.unit}`;
+  }
+
   function formatParamValue(s, param) {
     const def = MAPA_PARAMS[param];
     const val = def.get(s);
     if (val == null) return "—";
     if (param === "aqi") return `AQI ${val}`;
-    return `${val}${def.unit ? " " + def.unit : ""}`;
+    return `${val}${unitSuffix(def)}`;
   }
 
   function renderMapaLegend(param, domain) {
@@ -988,9 +1036,9 @@
       return;
     }
     legend.innerHTML = `
-      <span class="mapa-legend-item">${domain.min}${def.unit ? " " + def.unit : ""}</span>
+      <span class="mapa-legend-item">${domain.min}${unitSuffix(def)}</span>
       <span class="mapa-legend-gradient"></span>
-      <span class="mapa-legend-item">${domain.max}${def.unit ? " " + def.unit : ""}</span>
+      <span class="mapa-legend-item">${domain.max}${unitSuffix(def)}</span>
       <span class="mapa-legend-note">(escala relativa a los sensores actuales, no es un estándar de calidad)</span>`;
   }
 
@@ -1145,6 +1193,7 @@
     // Si "institución" todavía no está cargada (columna nueva, ver README),
     // institución y nombre son el mismo valor — no repetirlo dos veces.
     const nombreDispositivo = (s.institucion && s.institucion !== s.nombre) ? s.nombre : `Sensor #${s.sensor_index}`;
+    const provBadge = PROVIDER_BADGE[s.proveedor || "purpleair"];
     return `
         <div class="card-inner">
           <div class="card-face card-front">
@@ -1179,7 +1228,7 @@
               ${s.voc != null ? `
               <div class="metric">
                 <div class="metric-value">${s.voc}</div>
-                <div class="metric-label">VOC</div>
+                <div class="metric-label">VOC (índice)</div>
               </div>` : ""}
               ${s.co2 != null ? `
               <div class="metric">
@@ -1189,7 +1238,7 @@
               ${s.nox != null ? `
               <div class="metric">
                 <div class="metric-value">${s.nox}</div>
-                <div class="metric-label">NOx</div>
+                <div class="metric-label">NOx (índice)</div>
               </div>` : ""}
             </div>
             <div class="card-sub" style="margin-top:12px; padding-top:12px; border-top:1px solid var(--border);">
@@ -1197,6 +1246,10 @@
               ${stale ? `<br><span style="color:var(--text-dim)">⚠ Sin datos nuevos hace más de ${STALE_MINUTES} min — el sensor podría estar desconectado</span>` : ""}
             </div>
             <div class="card-flip-hint">toca para ver el gráfico ⟳</div>
+            ${provBadge ? `
+            <a href="${provBadge.href}" target="_blank" class="card-provider-badge" title="Sensor ${provBadge.label}" onclick="event.stopPropagation()">
+              <img src="${provBadge.src}" alt="${provBadge.label}">
+            </a>` : ""}
           </div>
           <div class="card-face card-back">
             <div class="card-back-hdr">
@@ -1427,7 +1480,16 @@
         </tr>`).join("");
       document.getElementById("tabla-wrap").innerHTML = `
         <table>
-          <thead><tr><th>Fecha / hora</th><th>PM2.5 (µg/m³)</th><th>Temp. (°C)</th><th>Humedad (%)</th><th>Presión (hPa)</th>${hasVoc ? "<th>VOC</th>" : ""}${hasCo2 ? "<th>CO2 (ppm)</th>" : ""}${hasNox ? "<th>NOx</th>" : ""}</tr></thead>
+          <thead><tr>
+            <th>Fecha / hora</th>
+            <th>PM2.5 <span class="th-unit">(µg/m³)</span></th>
+            <th>Temp. <span class="th-unit">(°C)</span></th>
+            <th>Humedad <span class="th-unit">(%)</span></th>
+            <th>Presión <span class="th-unit">(hPa)</span></th>
+            ${hasVoc ? `<th>VOC <span class="th-unit">(índice)</span></th>` : ""}
+            ${hasCo2 ? `<th>CO2 <span class="th-unit">(ppm)</span></th>` : ""}
+            ${hasNox ? `<th>NOx <span class="th-unit">(índice)</span></th>` : ""}
+          </tr></thead>
           <tbody>${filas}</tbody>
         </table>`;
     } catch (e) {
