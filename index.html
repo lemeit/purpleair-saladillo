@@ -59,6 +59,11 @@
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
+  /* Sin esto, al arrastrar/panear el mapa (Leaflet) el navegador puede
+     interpretar el gesto como "mover toda la página" en vez de solo el
+     mapa, corriendo el resto del layout hacia el costado. */
+  html, body { overflow-x: hidden; }
+
   body {
     background: var(--bg);
     color: var(--text);
@@ -1644,7 +1649,7 @@
     if (id === "mapa") cargarMapa();
   }
 
-  const APP_VERSION = "v1.0.5";
+  const APP_VERSION = "v1.0.6";
 
   if (window.LemeitCommon) {
     LemeitCommon.initSwitcher("aq");
