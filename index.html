@@ -608,16 +608,16 @@
 </div>
 
 <div class="nav">
-  <button class="nav-btn active" onclick="showTab('actuales',this)">Actuales</button>
+  <button class="nav-btn" onclick="showTab('actuales',this)">Actuales</button>
   <button class="nav-btn" onclick="showTab('historial',this)">Historial</button>
   <button class="nav-btn" onclick="showTab('grafico',this)">Gráfico</button>
-  <button class="nav-btn" onclick="showTab('mapa',this)">Mapa</button>
+  <button class="nav-btn active" onclick="showTab('mapa',this)">Mapa</button>
   <button class="nav-btn" onclick="showTab('acerca',this)">Acerca de</button>
 </div>
 
 <main>
 
-  <div class="section active" id="tab-actuales">
+  <div class="section" id="tab-actuales">
     <div class="grid" id="sensor-grid"></div>
   </div>
 
@@ -662,7 +662,7 @@
   </div>
 
   <!-- MAPA -->
-  <div class="section" id="tab-mapa">
+  <div class="section active" id="tab-mapa">
     <div class="chart-wrap" style="padding:0;overflow:hidden">
       <div class="chart-hdr" style="padding:12px 14px 0">
         <h2>Mapa de sensores</h2>
@@ -1649,7 +1649,7 @@
     if (id === "mapa") cargarMapa();
   }
 
-  const APP_VERSION = "v1.0.6";
+  const APP_VERSION = "v1.0.7";
 
   if (window.LemeitCommon) {
     LemeitCommon.initSwitcher("aq");
