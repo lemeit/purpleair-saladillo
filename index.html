@@ -1053,9 +1053,13 @@
 
   async function cargarMapa() {
     const dark = document.documentElement.getAttribute("data-theme") !== "light";
+    // Los tiles de CARTO ahora exigen API key — en vez de ponerla acá (quedaría
+    // visible en "ver código fuente" y cualquiera podría copiarla y gastar la
+    // cuota gratuita), se le piden al Worker propio, que es quien la agrega
+    // del lado del servidor (secret CARTO_API_KEY, ver worker/src/index.js).
     const tileUrl = dark
-      ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-      : "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png";
+      ? `${API_BASE}/tiles/dark_all/{z}/{x}/{y}{r}.png`
+      : `${API_BASE}/tiles/light_all/{z}/{x}/{y}{r}.png`;
 
     const conCoords = latestSensors.filter((s) => s.latitud != null && s.longitud != null);
     const centro = conCoords.length
@@ -1064,10 +1068,10 @@
 
     if (!mapaInst) {
       mapaInst = L.map("mapa-container").setView(centro, 13);
-      mapaTileLayer = L.tileLayer(tileUrl, { attribution: "© OpenStreetMap · CartoDB" }).addTo(mapaInst);
+      mapaTileLayer = L.tileLayer(tileUrl, { attribution: "© OpenStreetMap contributors © CARTO" }).addTo(mapaInst);
     } else {
       if (mapaTileLayer) mapaInst.removeLayer(mapaTileLayer);
-      mapaTileLayer = L.tileLayer(tileUrl, { attribution: "© OpenStreetMap · CartoDB" }).addTo(mapaInst);
+      mapaTileLayer = L.tileLayer(tileUrl, { attribution: "© OpenStreetMap contributors © CARTO" }).addTo(mapaInst);
     }
 
     mapaInst.eachLayer((l) => { if (l instanceof L.CircleMarker || l instanceof L.Marker) mapaInst.removeLayer(l); });
@@ -1640,7 +1644,7 @@
     if (id === "mapa") cargarMapa();
   }
 
-  const APP_VERSION = "v1.0.2";
+  const APP_VERSION = "v1.0.5";
 
   if (window.LemeitCommon) {
     LemeitCommon.initSwitcher("aq");

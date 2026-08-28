@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS lecturas (
     presion REAL,
     rssi INTEGER,
     co2 REAL,                             -- ppm, solo AirGradient (ver migration_004) — NULL en filas de PurpleAir
+    nox REAL,                             -- índice NOx (sensor SGP41), solo AirGradient (ver migration_005) — NULL en filas de PurpleAir
     creado_en TEXT DEFAULT (datetime('now'))
 );
 

@@ -1,6 +1,6 @@
 # Aire Saladillo — Red de Sensores PurpleAir + AirGradient
 
-Sistema de adquisición y visualización de calidad de aire (material particulado PM2.5/PM10, y desde agosto 2026 también CO2) a partir de sensores de bajo costo **PurpleAir** y **AirGradient** instalados en escuelas, jardines de infantes y domicilios de Saladillo, Buenos Aires, Argentina. Publicado en [aq.lemeit.ar](https://aq.lemeit.ar).
+Sistema de adquisición y visualización de calidad de aire (material particulado PM2.5/PM10, y desde agosto 2026 también CO2 y NOx) a partir de sensores de bajo costo **PurpleAir** y **AirGradient** instalados en escuelas, jardines de infantes y domicilios de Saladillo, Buenos Aires, Argentina. Publicado en [aq.lemeit.ar](https://aq.lemeit.ar).
 
 Es uno de tres proyectos de monitoreo ambiental que comparten la misma infraestructura de Cloudflare (Pages + Workers + D1), pensados para integrarse a futuro: [emas.lemeit.ar](https://emas.lemeit.ar) (meteorología), este (calidad del aire) y [wq.lemeit.ar](https://wq.lemeit.ar) (calidad del agua).
 
@@ -47,7 +47,9 @@ Además de PurpleAir, el Worker ahora ingesta datos de sensores **AirGradient** 
 
 **Endpoint de prueba/backfill**: `POST /api/ingest-ahora-airgradient`, mismo esquema de auth que `/api/ingest-ahora` (header `X-Ingest-Key`). El `scheduled()` del Worker corre la ingesta de PurpleAir y de AirGradient en paralelo (`Promise.all`), cada una con su propio try/catch para que una falla en un proveedor no tumbe al otro.
 
-**CO2 en el dashboard**: PurpleAir no mide CO2 (su BME68x da VOC, no CO2 real); AirGradient sí, vía sensor NDIR. El campo `co2` se agregó como parámetro más en el selector multi-parámetro del gráfico, como capa nueva en el mapa, como columna condicional en la tabla de historial y como tarjeta métrica adicional en las cards — todos siguiendo el mismo patrón "oculto salvo que el sensor lo reporte" que ya existía para VOC.
+**CO2 y NOx en el dashboard**: PurpleAir no mide CO2 ni NOx (su BME68x da VOC, no gases específicos); AirGradient sí, vía sensor NDIR (CO2, ppm) y sensor SGP41 (índice NOx, sin unidad física — un índice relativo, no una concentración, igual que VOC). Ambos campos (`co2`, `nox` — ver `migration_005_nox.sql`) se agregaron como parámetro más en el selector multi-parámetro del gráfico, como capa nueva en el mapa, como columna condicional en la tabla de historial y como tarjeta métrica adicional en las cards — todos siguiendo el mismo patrón "oculto salvo que el sensor lo reporte" que ya existía para VOC. En el gráfico/mapa, VOC y NOx se etiquetan explícitamente como "(índice)" para que quede claro que no son una unidad física (a diferencia de CO2 en ppm).
+
+**Multi-token AirGradient (agosto 2026)**: los sensores del autor están repartidos en dos organizaciones/cuentas distintas de AirGradient — "OpenAQ Ambassadors" (donación institucional) y "Saladillo" (cuenta personal). El Worker consulta ambos tokens por separado (`AIRGRADIENT_TOKEN_OPENAQ`, `AIRGRADIENT_TOKEN_SALADILLO`) y combina los resultados, en vez de depender de un único `AIRGRADIENT_API_TOKEN` (nombre usado en una versión anterior de este documento — ya no existe). Por eso, además, el `sensor_index` sintético de AirGradient se asigna buscando primero por `serial_externo` (el serial físico del hardware, único de fábrica) en vez de por `locationId` (que no es único entre las dos cuentas).
 
 ## Ingesta
 
@@ -81,11 +83,21 @@ INGEST_KEY               # clave propia para disparar POST /api/ingest-ahora —
                           # el valor actual es correcto, la forma es pegarle a
                           # POST /api/ingest-ahora y confirmar que responde
                           # {"ok":true,...} en vez de 401.
-AIRGRADIENT_API_TOKEN     # token de la API pública de AirGradient (dashboard → Place settings)
+AIRGRADIENT_TOKEN_OPENAQ    # token de la cuenta AirGradient "OpenAQ Ambassadors"
+AIRGRADIENT_TOKEN_SALADILLO # token de la cuenta AirGradient "Saladillo" (personal)
+                            # Al menos uno de los dos tiene que estar seteado — ver
+                            # "Multi-token AirGradient" arriba. Reemplazan al viejo
+                            # AIRGRADIENT_API_TOKEN (un solo token), que ya no se usa.
 AIRGRADIENT_LOCATION_IDS  # lista separada por comas de locationId a ingestar — filtra
                           # sensores fuera de la red de Saladillo (ver "Integración
                           # AirGradient" arriba). Si no está seteado, ingesta todo lo
-                          # que el token pueda ver.
+                          # que los tokens puedan ver.
+CARTO_API_KEY             # API key gratuita de CARTO Basemaps (tope 5M tiles/mes),
+                          # para los tiles del mapa. El Worker la usa como proxy en
+                          # GET /tiles/:style/:z/:x/:y{@2x}.png (style = light_all |
+                          # dark_all) — el frontend nunca ve la key directamente, así
+                          # nadie puede copiarla mirando "ver código fuente" del sitio
+                          # y gastar la cuota gratuita. Sacala de carto.com/basemaps/apikey.
 ```
 
 `worker/wrangler.toml` también tiene un bloque `[observability]` con `logs.enabled = true` (activado en agosto 2026 para diagnosticar el problema del Cron Trigger) — no es un secret, pero cualquier cambio ahí necesita `wrangler deploy` para tomar efecto, un toggle desde el dashboard solo no alcanza.
@@ -110,6 +122,12 @@ Funcionalidad: tarjetas clickeables con el estado actual de cada sensor (AQI, PM
 
 Si un sensor deja de reportar lecturas nuevas hace más de 25 minutos (se desconectó, se quedó sin señal, etc.), su tarjeta lo indica: el badge cambia a "Sin datos" en gris neutro (no un color de calidad de aire, porque ese dato ya quedó viejo), el velocímetro de AQI se atenúa, y aparece un aviso "⚠ Sin datos nuevos hace más de 25 min" debajo del horario de última actualización. Aplica tanto a la grilla de "Actuales" como a las tarjetas del "Mapa" (comparten la misma función de armado de tarjeta); la pestaña "Gráfico" no tiene grilla de tarjetas, solo el histórico del sensor seleccionado.
 
+**Badge de proveedor en cada tarjeta**: un ícono circular en el borde inferior de cada tarjeta (Actuales y Mapa) muestra el logo de PurpleAir o AirGradient según el campo `proveedor` que devuelve `/api/ultimas`. Si ese campo llegara vacío para algún sensor viejo, cae por default a `'purpleair'` — aunque en la práctica no debería pasar, porque la columna es `NOT NULL DEFAULT 'purpleair'` en el esquema (ver `schema.sql`).
+
+**Logos de atribución (OpenAQ, PurpleAir, AirGradient)**: implementado en agosto 2026, en tres tamaños distintos según el contexto — chico (`lm-attrib-row-sm`, 15px) en el footer compartido de los 3 portales hermanos, grande (`lm-attrib-row-lg`, 32px) en el panel "Acerca de" de este portal, para diferenciarlo del footer. Los estilos y el helper `LemeitCommon.renderFooter()` viven en el repo compartido `lemeit-design` (`design.lemeit.ar`), no acá.
+
+**Unidades**: el `text-transform:uppercase` de los encabezados de la tabla de Historial rompía el formato SI de las unidades en minúscula (µg/m³ → µG/M³, hPa → HPA); se corrigió envolviendo la parte de la unidad en un `<span class="th-unit">` que revierte la transformación. VOC y NOx, al no tener unidad física (son un índice del sensor), se etiquetan explícitamente como "(índice)" en vez de quedar el nombre del parámetro solo.
+
 ## Base de datos (Cloudflare D1)
 
 Base: `purpleair-saladillo` — tablas `sensores` (metadata) y `lecturas` (serie temporal), más la vista `v_ultima_lectura` (última lectura por sensor). Ver `schema.sql` para el esquema completo, `migration_001_canales.sql` para el agregado de columnas de canal A/B, `migration_002_mas_campos.sql` para VOC y canales A/B de PM1.0/PM10.0, y `migration_003_dedupe_lecturas.sql` para el fix de tarjetas duplicadas descripto abajo.
@@ -127,6 +145,38 @@ El Worker `worker/src/index.js` expone:
 | `GET /api/historico/:sensor_index?range=24h\|7d\|30d` | Historial de un sensor, filtrado por ventana de tiempo real (no por cantidad de filas) |
 | `POST /api/ingest-ahora` | Dispara una corrida de ingesta manual de PurpleAir. Requiere header `X-Ingest-Key` con el secret `INGEST_KEY` — sin la clave correcta devuelve 401 |
 | `POST /api/ingest-ahora-airgradient` | Dispara una corrida de ingesta manual de AirGradient. Mismo esquema de auth que el endpoint anterior |
+| `GET /tiles/:style/:z/:x/:y{@2x}.png` (`style` = `light_all` \| `dark_all`) | Proxy de tiles del mapa hacia CARTO Basemaps — agrega la key del secret `CARTO_API_KEY` del lado del servidor, así nunca queda expuesta en el HTML público. Ver "Variables de entorno / secrets" arriba. Cachea 7 días tanto en la CDN de Cloudflare (`cf.cacheTtl`) como en el navegador (`Cache-Control`). |
+
+### Cómo editar sensores a mano en D1 (nombre, institución, etc.)
+
+El flujo normal es cargar `institucion` (y `nombre`, si hace falta) desde cada portal/panel del proveedor al instalar el sensor, como se viene haciendo. Esta sección queda de referencia por si en algún momento hace falta corregir algo puntual directamente en la base, sin pasar por ahí.
+
+**Dónde**: Cloudflare dashboard → Workers & Pages → pestaña D1 → base `purpleair-saladillo` → pestaña "Console" (o "Query database"). También se puede correr desde la terminal con `npx wrangler d1 execute purpleair-saladillo --remote --command "..."`, parado en `worker/`.
+
+**Ver qué hay antes de tocar nada:**
+
+```sql
+SELECT sensor_index, nombre, institucion, proveedor, latitud, longitud FROM sensores ORDER BY sensor_index;
+```
+
+**Cambiar nombre/institución de un sensor puntual** (reemplazar `900003` y los textos por lo que corresponda):
+
+```sql
+UPDATE sensores
+SET nombre = 'Saladillo Centro',
+    institucion = 'Saladillo Centro'
+WHERE sensor_index = 900003;
+```
+
+Es un cambio permanente y seguro: el Worker nunca pisa `nombre` ni `institucion` en las corridas de ingesta posteriores (el `ON CONFLICT` de `upsertSensorMetadata()`/`upsertAirGradientSensor()` en `worker/src/index.js` solo actualiza `latitud`/`longitud`/`serial_externo`, nunca esas dos columnas) — la única vez que se setean es en el primer `INSERT`, cuando el sensor se ve por primera vez.
+
+**Ojo con `latitud`/`longitud` de AirGradient**: a diferencia de `nombre`/`institucion`, estas dos SÍ se pisan en cada ingesta con lo que devuelva la API de AirGradient (la ubicación configurada en su app/dashboard). Si se corrigen a mano en D1, la próxima ingesta las vuelve a pisar. La forma correcta de fijar la ubicación definitiva de un sensor AirGradient es actualizarla en la app/dashboard de AirGradient, no en D1. (Para PurpleAir es la misma lógica, contra el sitio de PurpleAir.)
+
+**Marcar un sensor como inactivo** (deja de aparecer en el dashboard, sin borrar su historial):
+
+```sql
+UPDATE sensores SET activo = 0 WHERE sensor_index = 900003;
+```
 
 ## Proyecto educativo
 
@@ -139,8 +189,9 @@ Ideas pendientes de evaluar e implementar, anotadas para no perderlas entre sesi
 
 - ~~**Selector de parámetros en la pestaña "Gráfico"**~~ — implementado: checkboxes para elegir qué parámetros graficar superpuestos (PM2.5, PM1.0, PM10, Temp, Humedad, Presión, VOC, CO2), cada uno con su propio eje Y independiente vía `yAxisID`.
 - ~~**Sensores AirGradient (a futuro)**~~ — implementado en agosto 2026: ver "Integración AirGradient" arriba. Sigue pendiente instalar en su ubicación definitiva el segundo sensor de Saladillo (kit DIY) y, más adelante, evaluar sumar un monitor **Clarity Node-S** (solar, transmisión celular) con el mismo esquema `proveedor`/`serial_externo` ya armado para AirGradient.
-- **Nombres institucionales para los sensores AirGradient**: hoy `institucion` queda en `NULL` para ambos (el dashboard cae al `locationName` crudo de AirGradient, ej. "84fce606ed88_Saladillo_Centro"). Cosmético, no bloquea nada — actualizar a mano en la tabla `sensores` cuando haya tiempo.
-- **Logos de atribución (OpenAQ, PurpleAir, AirGradient)**: sumar los logos de las redes/programas de los que el autor participa en los tres portales hermanos (posiblemente en el footer compartido `lemeit-common.js` y/o en la sección "Acerca de" de cada uno), y reflejarlo también en los proyectos correspondientes de profe.lemeit.ar. Pendiente, sin apuro.
+- ~~**Nombres institucionales para los sensores AirGradient**~~ — se pueden corregir a mano en la tabla `sensores` (ver "Cómo editar sensores a mano en D1" más abajo) y quedan firmes: el `ON CONFLICT` del upsert de AirGradient nunca toca `nombre` ni `institucion` después del primer insert.
+- ~~**Logos de atribución (OpenAQ, PurpleAir, AirGradient)**~~ — implementado en agosto 2026, ver "Dashboard" arriba. Reflejarlo también en los proyectos correspondientes de profe.lemeit.ar sigue pendiente, sin apuro.
+- **Ampliar los parámetros expuestos en historial/mapa**: PurpleAir y AirGradient reportan más campos de los que hoy se muestran — promedios de PM2.5 a 10min/60min y señal WiFi (`rssi`) ya se guardan en `lecturas` pero no se exponen en la UI (sin costo de migración); conteo de partículas por tamaño (0.3–10µm, ambos proveedores) y voltaje/entrada analógica (`analog_input`, solo PurpleAir) requerirían columnas nuevas. Evaluado en agosto 2026, pendiente de decidir alcance.
 - **Simplificar la triple redundancia de ingesta**: hoy corren tres disparadores en paralelo (Cloudflare, GitHub Actions, cron-job.org) porque el Cron Trigger de Cloudflare quedó registrado pero sin disparar nunca `scheduled()` — ver "Historia de la ingesta automática" arriba. Revisar de tanto en tanto la pestaña Observability del Worker; si el Cron Trigger empieza a aparecer ahí disparando con éxito, evaluar sacar GitHub Actions y/o cron-job.org para volver a un solo camino. No hay apuro — los tres conviven sin duplicar datos.
 
 ## Contexto institucional y proyectos futuros
