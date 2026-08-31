@@ -7,10 +7,16 @@
  * el binding a D1 se configura en wrangler.toml y Cloudflare lo
  * inyecta de forma segura en tiempo de ejecución.
  *
- * Endpoints:
- *   GET /api/sensores        -> metadata de todos los sensores (cualquier proveedor)
+ * Endpoints (API pública, de solo lectura — sin autenticación, CORS abierto):
+ *   GET /api/sensores          -> metadata de todos los sensores (cualquier proveedor)
  *   GET /api/ultimas           -> última lectura de cada sensor (vista v_ultima_lectura)
- *   GET /api/historico/:index  -> historial de un sensor (últimas 200 lecturas)
+ *   GET /api/historico/:index  -> historial de un sensor
+ *       ?range=24h|7d|30d        ventana relativa (default 24h)
+ *       ?desde=YYYY-MM-DD[ HH:MM:SS]&hasta=... rango de fechas absoluto en UTC
+ *                                 (si viene desde y/o hasta, pisa a "range")
+ *       ?limit=N                 tope de filas (default 3000, máximo 20000)
+ *   Los tres endpoints aceptan &formato=csv para descargar CSV en vez de JSON.
+ *   Documentación con ejemplos: /api.html en aq.lemeit.ar
  *
  * Ingesta (scheduled, ver [triggers] en wrangler.toml): reemplazó al cron de
  * GitHub Actions (`.github/workflows/purpleair-ingest.yml`) como camino
@@ -278,6 +284,38 @@ function json(data, status = 200) {
   });
 }
 
+// ── Exportación CSV ─────────────────────────────────────────────────────────
+// Las columnas del CSV se toman de las claves de la primera fila devuelta por
+// D1 (mismo orden que el SELECT), así que nunca se desincroniza del esquema
+// real: si mañana se agrega una columna a la tabla, el CSV la incluye sola.
+function toCsv(rows) {
+  if (!rows.length) return "";
+  const headers = Object.keys(rows[0]);
+  const escape = (v) => {
+    if (v === null || v === undefined) return "";
+    const s = String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const lines = [headers.join(",")];
+  for (const r of rows) lines.push(headers.map((h) => escape(r[h])).join(","));
+  return lines.join("\n");
+}
+
+function csvResponse(rows, filename) {
+  return new Response(toCsv(rows), {
+    status: 200,
+    headers: {
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename="${filename}"`,
+      ...CORS_HEADERS,
+    },
+  });
+}
+
+function wantsCsv(url) {
+  return (url.searchParams.get("formato") || "").toLowerCase() === "csv";
+}
+
 // ── Proxy de tiles del mapa (CARTO Basemaps) ────────────────────────────────
 // CARTO ahora exige una API key para servir tiles. En vez de poner esa key
 // en el HTML público (cualquiera podría copiarla de "ver código fuente" y
@@ -323,6 +361,7 @@ export default {
         const { results } = await env.DB.prepare(
           "SELECT * FROM sensores WHERE activo = 1"
         ).all();
+        if (wantsCsv(url)) return csvResponse(results, "sensores.csv");
         return json(results);
       }
 
@@ -332,25 +371,37 @@ export default {
            FROM v_ultima_lectura l
            JOIN sensores s ON s.sensor_index = l.sensor_index`
         ).all();
+        if (wantsCsv(url)) return csvResponse(results, "ultimas_lecturas.csv");
         return json(results);
       }
 
       const historicoMatch = path.match(/^\/api\/historico\/(\d+)$/);
       if (historicoMatch) {
         const sensorIndex = historicoMatch[1];
-        const range = url.searchParams.get("range") || "24h";
-        const rangeMap = { "24h": "-24 hours", "7d": "-7 days", "30d": "-30 days" };
-        const modifier = rangeMap[range] || rangeMap["24h"];
+        const desde = url.searchParams.get("desde");
+        const hasta = url.searchParams.get("hasta");
+        const limit = Math.min(parseInt(url.searchParams.get("limit") || "3000", 10) || 3000, 20000);
 
-        const { results } = await env.DB.prepare(
-          `SELECT * FROM lecturas
-           WHERE sensor_index = ?
-             AND timestamp >= datetime('now', ?)
-           ORDER BY timestamp ASC
-           LIMIT 3000`
-        )
-          .bind(sensorIndex, modifier)
-          .all();
+        let where = "sensor_index = ?";
+        const binds = [sensorIndex];
+
+        if (desde || hasta) {
+          // Rango de fechas absoluto en UTC, ej: ?desde=2026-08-01&hasta=2026-08-15
+          if (desde) { where += " AND timestamp >= ?"; binds.push(desde); }
+          if (hasta) { where += " AND timestamp <= ?"; binds.push(hasta); }
+        } else {
+          // Sin desde/hasta: se mantiene el comportamiento previo por ventana relativa.
+          const range = url.searchParams.get("range") || "24h";
+          const rangeMap = { "24h": "-24 hours", "7d": "-7 days", "30d": "-30 days" };
+          const modifier = rangeMap[range] || rangeMap["24h"];
+          where += " AND timestamp >= datetime('now', ?)";
+          binds.push(modifier);
+        }
+
+        const sql = `SELECT * FROM lecturas WHERE ${where} ORDER BY timestamp ASC LIMIT ?`;
+        binds.push(limit);
+        const { results } = await env.DB.prepare(sql).bind(...binds).all();
+        if (wantsCsv(url)) return csvResponse(results, `sensor_${sensorIndex}_historico.csv`);
         return json(results);
       }
 

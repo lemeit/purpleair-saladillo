@@ -690,7 +690,7 @@
         Red de sensores <a href="https://www.purpleair.com" target="_blank" style="color:var(--accent)">PurpleAir</a> y <a href="https://www.airgradient.com" target="_blank" style="color:var(--accent)">AirGradient</a> instalada en escuelas, jardines de infantes y domicilios de Saladillo, que mide material particulado (PM2.5/PM10), CO2 y otros parámetros en tiempo real como parte de una iniciativa de monitoreo y educación ambiental.
       </p>
       <p style="font-size:12px;color:var(--text-dim);line-height:1.7;margin-top:10px">
-        Arquitectura: varios disparadores automáticos (un Worker de Cloudflare y GitHub Actions, con un respaldo externo) consultan la API de PurpleAir cada 15 minutos y guardan los datos en Cloudflare D1; un Worker expone una API REST propia que consume este dashboard, publicado en Cloudflare Pages.
+        Arquitectura: varios disparadores automáticos (un Worker de Cloudflare y GitHub Actions, con un respaldo externo) consultan la API de PurpleAir cada 15 minutos y guardan los datos en Cloudflare D1; un Worker expone una <a href="api.html" style="color:var(--accent)">API REST propia y pública</a> que consume este dashboard y que también puede usar cualquiera para bajar los datos.
         Es uno de tres proyectos ambientales hermanos: <a href="https://emas.lemeit.ar" target="_blank" style="color:var(--accent)">emas.lemeit.ar</a> (meteorología), este (calidad del aire) y <a href="https://wq.lemeit.ar" target="_blank" style="color:var(--accent)">wq.lemeit.ar</a> (calidad del agua).
       </p>
       <p style="font-size:12px;color:var(--text-dim);line-height:1.7;margin-top:10px">
@@ -1649,7 +1649,7 @@
     if (id === "mapa") cargarMapa();
   }
 
-  const APP_VERSION = "v1.0.8";
+  const APP_VERSION = "v1.0.9";
 
   if (window.LemeitCommon) {
     LemeitCommon.initSwitcher("aq");

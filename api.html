@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>API · Aire Saladillo</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://design.lemeit.ar/lemeit-theme.css">
+<script>
+  (function () {
+    var saved = localStorage.getItem("theme");
+    var theme = saved || "light";
+    document.documentElement.setAttribute("data-theme", theme);
+  })();
+</script>
+<style>
+  :root {
+    --bg: #1A1612; --bg-panel: #221E18; --bg-panel-hover: #2B241D;
+    --border: #3D3028; --text: #F2ECE4; --text-dim: #C9BEB2;
+    --accent: #D9691F; --accent-dim: #3D2A1A; --good: #8FB56B;
+    --font-display: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+    --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+  }
+  :root[data-theme="light"] {
+    --bg: #FAF7F2; --bg-panel: #ffffff; --bg-panel-hover: #F0EBE2;
+    --border: #E0D9CC; --text: #2A211A; --text-dim: #6B5C4E;
+    --accent: #9B3D00; --accent-dim: #F0DDCC; --good: #4C7A3D;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { overflow-x: hidden; }
+  body {
+    background: var(--bg); color: var(--text); font-family: var(--font-body);
+    line-height: 1.6; transition: background .15s, color .15s;
+  }
+  .header {
+    background: var(--bg-panel); border-bottom: 1px solid var(--border);
+    padding: 14px 16px; display: flex; align-items: center; gap: 10px;
+    position: sticky; top: 0; box-shadow: 0 1px 4px rgba(0,0,0,.1);
+  }
+  .logo {
+    font-family: var(--font-display); font-size: 10px; font-weight: 700; color: #fff;
+    background: var(--accent); padding: 4px 7px; border-radius: 5px; flex-shrink: 0;
+  }
+  .header h1 { font-size: 15px; font-weight: 600; }
+  .header a.back { margin-left: auto; font-size: 12px; color: var(--text-dim); text-decoration: none; }
+  .header a.back:hover { color: var(--accent); }
+  main { max-width: 780px; margin: 0 auto; padding: 24px 18px 60px; }
+  h2 { font-size: 16px; margin: 34px 0 8px; color: var(--accent); }
+  h2:first-of-type { margin-top: 0; }
+  p { margin-bottom: 10px; color: var(--text); }
+  p.dim { color: var(--text-dim); font-size: 13px; }
+  code, pre { font-family: var(--font-display); font-size: 12.5px; }
+  code {
+    background: var(--accent-dim); color: var(--text); padding: 2px 5px; border-radius: 4px;
+  }
+  pre {
+    background: var(--bg-panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 14px; overflow-x: auto; margin: 10px 0 16px; color: var(--text);
+  }
+  .endpoint {
+    background: var(--bg-panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px; margin-bottom: 16px;
+  }
+  .endpoint .path {
+    font-family: var(--font-display); font-size: 13px; font-weight: 700; color: var(--accent);
+    display: block; margin-bottom: 6px; word-break: break-all;
+  }
+  .method {
+    display: inline-block; font-family: var(--font-display); font-size: 10px; font-weight: 700;
+    color: var(--good); border: 1px solid var(--good); border-radius: 4px; padding: 1px 6px;
+    margin-right: 8px; vertical-align: middle;
+  }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0 4px; font-size: 12.5px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--text-dim); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+  td code { font-size: 11.5px; }
+  footer { max-width: 780px; margin: 0 auto; padding: 0 18px 40px; color: var(--text-dim); font-size: 12px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">AQ</div>
+  <h1>API · Aire Saladillo</h1>
+  <a class="back" href="index.html">&larr; Volver al portal</a>
+</div>
+
+<main>
+  <p>Esta es la API pública de solo lectura que ya usa <code>aq.lemeit.ar</code> para mostrar los datos de la red de sensores de calidad del aire (PurpleAir y AirGradient) en escuelas y jardines de Saladillo. Cualquiera puede consumirla directamente, sin registro ni token: es de lectura, CORS abierto, y devuelve los mismos datos ambientales que ya son públicos en el portal.</p>
+
+  <p class="dim">Base URL: <code>https://purpleair-saladillo-api.fisicai-eureka-01.workers.dev</code></p>
+
+  <h2>GET /api/sensores</h2>
+  <div class="endpoint">
+    <span class="path"><span class="method">GET</span>/api/sensores</span>
+    <p class="dim">Metadata de todos los sensores activos: nombre, institución, latitud/longitud, proveedor (purpleair / airgradient).</p>
+    <pre>curl "https://purpleair-saladillo-api.fisicai-eureka-01.workers.dev/api/sensores"</pre>
+  </div>
+
+  <h2>GET /api/ultimas</h2>
+  <div class="endpoint">
+    <span class="path"><span class="method">GET</span>/api/ultimas</span>
+    <p class="dim">Última lectura registrada de cada sensor, con su metadata.</p>
+    <pre>curl "https://purpleair-saladillo-api.fisicai-eureka-01.workers.dev/api/ultimas"</pre>
+  </div>
+
+  <h2>GET /api/historico/:sensor_index</h2>
+  <div class="endpoint">
+    <span class="path"><span class="method">GET</span>/api/historico/:sensor_index</span>
+    <p class="dim">Serie histórica de lecturas de un sensor puntual (el <code>sensor_index</code> se obtiene de <code>/api/sensores</code> o <code>/api/ultimas</code>).</p>
+    <table>
+      <tr><th>Parámetro</th><th>Descripción</th></tr>
+      <tr><td><code>range</code></td><td>Ventana relativa: <code>24h</code> (default), <code>7d</code> o <code>30d</code>. Se ignora si se manda <code>desde</code> y/o <code>hasta</code>.</td></tr>
+      <tr><td><code>desde</code></td><td>Fecha/hora UTC de inicio, formato <code>YYYY-MM-DD</code> o <code>YYYY-MM-DD HH:MM:SS</code>. Rango absoluto en vez de relativo a "ahora".</td></tr>
+      <tr><td><code>hasta</code></td><td>Fecha/hora UTC de fin, mismo formato que <code>desde</code>.</td></tr>
+      <tr><td><code>limit</code></td><td>Tope de filas devueltas. Default 3000, máximo 20000.</td></tr>
+      <tr><td><code>formato</code></td><td><code>csv</code> para descargar un archivo CSV en vez de JSON (ver más abajo).</td></tr>
+    </table>
+    <pre>curl "https://purpleair-saladillo-api.fisicai-eureka-01.workers.dev/api/historico/12345?range=7d"
+
+curl "https://purpleair-saladillo-api.fisicai-eureka-01.workers.dev/api/historico/12345?desde=2026-08-01&hasta=2026-08-15"</pre>
+  </div>
+
+  <h2>Descargar como CSV</h2>
+  <p>Los tres endpoints aceptan <code>&formato=csv</code> y devuelven el mismo contenido en CSV, con encabezado, listo para abrir en Excel o Google Sheets:</p>
+  <pre>curl -O -J "https://purpleair-saladillo-api.fisicai-eureka-01.workers.dev/api/historico/12345?range=30d&formato=csv"</pre>
+
+  <h2>Notas</h2>
+  <p class="dim">No hace falta API key ni registro: los datos son de carácter ambiental y ya son públicos en el portal. La API tiene un uso moderado de todos modos — evitá consultas en loop muy frecuentes. Los timestamps se guardan y devuelven en UTC. Si vas a reutilizar estos datos públicamente, agradecemos que menciones como fuente a <a href="https://aq.lemeit.ar" style="color:var(--accent)">aq.lemeit.ar</a> — Red de sensores de calidad del aire de Saladillo.</p>
+</main>
+
+<footer>aq.lemeit.ar · Red de sensores de calidad del aire en escuelas y jardines de Saladillo</footer>
+
+</body>
+</html>
