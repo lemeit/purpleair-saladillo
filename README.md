@@ -147,6 +147,8 @@ El Worker `worker/src/index.js` expone:
 | `POST /api/ingest-ahora-airgradient` | Dispara una corrida de ingesta manual de AirGradient. Mismo esquema de auth que el endpoint anterior |
 | `GET /tiles/:style/:z/:x/:y{@2x}.png` (`style` = `light_all` \| `dark_all`) | Proxy de tiles del mapa hacia CARTO Basemaps — agrega la key del secret `CARTO_API_KEY` del lado del servidor, así nunca queda expuesta en el HTML público. Ver "Variables de entorno / secrets" arriba. Cachea 7 días tanto en la CDN de Cloudflare (`cf.cacheTtl`) como en el navegador (`Cache-Control`). |
 
+**API pública (agosto 2026)**: los tres endpoints de lectura (`/api/sensores`, `/api/ultimas`, `/api/historico/:sensor_index`) están pensados para que cualquiera los consuma directo, sin registro ni token — CORS abierto, sin autenticación. `/api/historico` además acepta `desde`/`hasta` (`YYYY-MM-DD[ HH:MM:SS]`, UTC) como alternativa a `range` para pedir un rango de fechas absoluto en vez de relativo a "ahora", y los tres aceptan `&formato=csv` para bajar CSV en vez de JSON. Documentación con ejemplos de uso: [`aq.lemeit.ar/api.html`](https://aq.lemeit.ar/api.html) (fuente: `api.html` en la raíz de este repo).
+
 ### Cómo editar sensores a mano en D1 (nombre, institución, etc.)
 
 El flujo normal es cargar `institucion` (y `nombre`, si hace falta) desde cada portal/panel del proveedor al instalar el sensor, como se viene haciendo. Esta sección queda de referencia por si en algún momento hace falta corregir algo puntual directamente en la base, sin pasar por ahí.
