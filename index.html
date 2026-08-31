@@ -387,7 +387,7 @@
   .card-unit { font-family: var(--font-display); font-size: 10px; color: var(--text-dim); margin-left: 2px; }
 
   /* ── MAPA ── */
-  #mapa-container { height: 400px; width: 100%; }
+  #mapa-container { height: 400px; width: 100%; position: relative; z-index: 1; }
   @media (max-width: 640px) {
     #mapa-container { height: 280px; }
   }
@@ -1649,7 +1649,7 @@
     if (id === "mapa") cargarMapa();
   }
 
-  const APP_VERSION = "v1.0.7";
+  const APP_VERSION = "v1.0.8";
 
   if (window.LemeitCommon) {
     LemeitCommon.initSwitcher("aq");
