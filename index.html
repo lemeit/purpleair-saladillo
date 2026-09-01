@@ -1172,6 +1172,17 @@
     try {
       const res = await fetch(`${API_BASE}/api/ultimas`);
       const data = await res.json();
+      // La API puede responder 200 con un array, o un error (ej. cuota de
+      // D1 agotada, backend caído) con {error: "..."} — sin este chequeo,
+      // un 500 dejaba a latestSensors apuntando a ese objeto de error y
+      // populateSensorSelects() explotaba con "latestSensors.map is not a
+      // function", lo que rompía el selector de sensor de TODAS las
+      // pestañas (Historial, Gráfico), no solo la de "Actuales".
+      if (!res.ok || !Array.isArray(data)) {
+        throw new Error(
+          (data && data.error) || `La API respondió ${res.status}`
+        );
+      }
       latestSensors = data;
       renderGrid(data);
       populateSensorSelects();

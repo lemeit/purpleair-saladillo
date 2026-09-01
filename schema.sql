@@ -51,14 +51,21 @@ CREATE INDEX IF NOT EXISTS idx_lecturas_ts ON lecturas (timestamp);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_lecturas_sensor_ts_unique ON lecturas (sensor_index, timestamp);
 
 -- Vista de última lectura por sensor, útil para el dashboard "estado actual".
--- NOT EXISTS en vez de MAX()+JOIN a propósito: garantiza como máximo UNA
--- fila por sensor aunque hubiera timestamps empatados (desempata por id).
+-- Ver migration_006_optimizar_vista_ultima_lectura.sql: la versión original
+-- usaba NOT EXISTS correlacionado, que recorría TODA la tabla lecturas en
+-- cada consulta (/api/ultimas, llamado cada 5 min por pestaña abierta) y
+-- fue la causa principal de agotar la cuota gratuita de D1 (5M rows_read/
+-- día) el 2026-09-01, a medida que la tabla creció con meses de ingesta.
+-- migration_003_dedupe_lecturas.sql ya garantiza como máximo una fila por
+-- (sensor_index, timestamp) -- índice UNIQUE idx_lecturas_sensor_ts_unique --
+-- así que GROUP BY + MAX(timestamp) alcanza, sin desempate por id, y con
+-- el índice idx_lecturas_sensor_ts (sensor_index, timestamp) SQLite lo
+-- resuelve leyendo ~1 fila por sensor en vez de la tabla entera.
 CREATE VIEW IF NOT EXISTS v_ultima_lectura AS
 SELECT l.*
 FROM lecturas l
-WHERE NOT EXISTS (
-    SELECT 1 FROM lecturas l2
-    WHERE l2.sensor_index = l.sensor_index
-      AND (l2.timestamp > l.timestamp
-           OR (l2.timestamp = l.timestamp AND l2.id > l.id))
-);
+JOIN (
+    SELECT sensor_index, MAX(timestamp) AS ts
+    FROM lecturas
+    GROUP BY sensor_index
+) m ON m.sensor_index = l.sensor_index AND m.ts = l.timestamp;
