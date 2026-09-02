@@ -149,9 +149,22 @@ curl -H "X-Admin-Key: TU_ADMIN_KEY" "https://purpleair-saladillo-api.fisicai-eur
     -> las últimas N visitas, una por una (default 200, máximo 2000)
 ```
 
-Al ir por header (no por `?key=...` en la URL), no queda pegado en el historial del navegador ni en logs — pero por lo mismo ya no se puede abrir pegando la URL en la barra de direcciones, hace falta `curl` (o similar) para poder mandar el header. Para algo más agregado (visitas a `index.html` en sí, no solo a la API, más navegadores/dispositivos, etc.), Cloudflare ya trae analíticas propias sin tocar código: **Cloudflare dashboard → Workers & Pages → el proyecto de Pages (`aq.lemeit.ar`) → pestaña "Analytics"** muestra requests y visitantes únicos de la web estática; para el Worker de la API, la pestaña "Metrics" del Worker muestra lo mismo a nivel de requests. Ninguna de las dos requiere activar nada.
+Al ir por header (no por `?key=...` en la URL), no queda pegado en el historial del navegador ni en logs — pero por lo mismo ya no se puede abrir pegando la URL en la barra de direcciones, hace falta `curl` (o similar) para poder mandar el header. En PowerShell (Windows), `curl` es un alias de `Invoke-WebRequest` y no entiende `-H`; usar `curl.exe` (el curl real, ya viene con Windows 10/11) o `Invoke-WebRequest -Headers @{"X-Admin-Key"="..."}`.
 
-Este mismo esquema (migración + dos endpoints) se puede replicar igual en `ema-saladillo` y `agua-saladillo` si hace falta — son el mismo patrón de Worker + D1.
+Para no tener que escribir la URL y el header cada vez, `scripts/ver-visitas.ps1` hace la consulta por vos:
+
+```powershell
+.\scripts\ver-visitas.ps1                          # resumen: 24h, 7 días, top rutas, top países
+.\scripts\ver-visitas.ps1 -Modo visitas -Limit 50   # últimas 50 visitas, una por una
+```
+
+Pide la `ADMIN_KEY` la primera vez (input oculto). Para no tipearla cada vez en una sesión: `$env:PA_ADMIN_KEY = "tu_clave"` antes de correr el script. La clave no queda guardada en el script ni en el repo.
+
+Para algo más agregado (visitas a `index.html` en sí, no solo a la API, más navegadores/dispositivos, etc.), Cloudflare ya trae analíticas propias sin tocar código: **Cloudflare dashboard → Workers & Pages → el proyecto de Pages (`aq.lemeit.ar`) → pestaña "Analytics"** muestra requests y visitantes únicos de la web estática; para el Worker de la API, la pestaña "Metrics" del Worker muestra lo mismo a nivel de requests. Ninguna de las dos requiere activar nada.
+
+**Gestión del espacio en D1**: cada visita ocupa una fila chica (~150-250 bytes); con el plan gratis de D1 (5 GB) no hay riesgo de quedarse sin espacio en el corto/mediano plazo. No hay limpieza automática implementada todavía — la tabla `visitas` crece sin límite. Si en el futuro hace falta, se puede borrar a mano (`wrangler d1 execute purpleair-saladillo --remote --command "DELETE FROM visitas WHERE ts < datetime('now', '-6 months')"`) o sumar un borrado automático al cron existente. Queda pendiente para cuando haga falta — por ahora, sin tráfico real, no es urgente.
+
+Este mismo esquema (migración + dos endpoints + script de consulta) se puede replicar igual en `ema-saladillo` y `agua-saladillo` si hace falta — son el mismo patrón de Worker + D1. Pendiente, no implementado todavía.
 
 ## Base de datos (Cloudflare D1)
 
