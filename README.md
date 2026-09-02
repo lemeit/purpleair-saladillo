@@ -102,6 +102,9 @@ CARTO_API_KEY             # API key gratuita de CARTO Basemaps (tope 5M tiles/me
                           # dark_all) — el frontend nunca ve la key directamente, así
                           # nadie puede copiarla mirando "ver código fuente" del sitio
                           # y gastar la cuota gratuita. Sacala de carto.com/basemaps/apikey.
+ADMIN_KEY                 # clave propia para GET /api/admin/visitas y /api/admin/resumen
+                          # (ver "Ver quién accede" más abajo). Elegís cualquier string
+                          # largo al azar, no viene de ningún servicio externo.
 ```
 
 `worker/wrangler.toml` también tiene un bloque `[observability]` con `logs.enabled = true` (activado en agosto 2026 para diagnosticar el problema del Cron Trigger) — no es un secret, pero cualquier cambio ahí necesita `wrangler deploy` para tomar efecto, un toggle desde el dashboard solo no alcanza.
@@ -131,6 +134,24 @@ Si un sensor deja de reportar lecturas nuevas hace más de 25 minutos (se descon
 **Logos de atribución (OpenAQ, PurpleAir, AirGradient)**: implementado en agosto 2026, en tres tamaños distintos según el contexto — chico (`lm-attrib-row-sm`, 15px) en el footer compartido de los 3 portales hermanos, grande (`lm-attrib-row-lg`, 32px) en el panel "Acerca de" de este portal, para diferenciarlo del footer. Los estilos y el helper `LemeitCommon.renderFooter()` viven en el repo compartido `lemeit-design` (`design.lemeit.ar`), no acá.
 
 **Unidades**: el `text-transform:uppercase` de los encabezados de la tabla de Historial rompía el formato SI de las unidades en minúscula (µg/m³ → µG/M³, hPa → HPA); se corrigió envolviendo la parte de la unidad en un `<span class="th-unit">` que revierte la transformación. VOC y NOx, al no tener unidad física (son un índice del sensor), se etiquetan explícitamente como "(índice)" en vez de quedar el nombre del parámetro solo.
+
+## Ver quién accede (visitas)
+
+Sin agregar ningún panel: cada GET a un endpoint público (`/api/sensores`, `/api/ultimas`, `/api/historico/:index`) queda registrado en la tabla `visitas` de D1 — timestamp, ruta, país (lo resuelve Cloudflare gratis, sin geolocalizar IPs a mano) y user-agent/referrer. Se escribe en segundo plano (`ctx.waitUntil`), así que no demora la respuesta real, y no toca ni cookies ni nada del lado del navegador.
+
+Para consultarlo, dos endpoints de solo lectura protegidos por el secret `ADMIN_KEY` (`wrangler secret put ADMIN_KEY`, dentro de `worker/`):
+
+```
+GET /api/admin/resumen?key=TU_ADMIN_KEY
+    -> visitas de las últimas 24h y 7 días, top 10 rutas y top 10 países (7 días)
+
+GET /api/admin/visitas?key=TU_ADMIN_KEY&limit=200
+    -> las últimas N visitas, una por una (default 200, máximo 2000)
+```
+
+Se abren directo en el navegador (o con `curl`) — no hace falta ningún panel de administración. Para algo más agregado (visitas a `index.html` en sí, no solo a la API, más navegadores/dispositivos, etc.), Cloudflare ya trae analíticas propias sin tocar código: **Cloudflare dashboard → Workers & Pages → el proyecto de Pages (`aq.lemeit.ar`) → pestaña "Analytics"** muestra requests y visitantes únicos de la web estática; para el Worker de la API, la pestaña "Metrics" del Worker muestra lo mismo a nivel de requests. Ninguna de las dos requiere activar nada.
+
+Este mismo esquema (migración + dos endpoints) se puede replicar igual en `ema-saladillo` y `agua-saladillo` si hace falta — son el mismo patrón de Worker + D1.
 
 ## Base de datos (Cloudflare D1)
 

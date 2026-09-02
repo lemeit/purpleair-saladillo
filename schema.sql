@@ -69,3 +69,17 @@ JOIN (
     FROM lecturas
     GROUP BY sensor_index
 ) m ON m.sensor_index = l.sensor_index AND m.ts = l.timestamp;
+
+-- Registro mínimo de accesos a la API, para saber quién usa el portal sin
+-- depender de un panel externo (ver migration_007_visitas.sql y los
+-- endpoints /api/admin/visitas y /api/admin/resumen en worker/src/index.js).
+CREATE TABLE IF NOT EXISTS visitas (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts TEXT NOT NULL DEFAULT (datetime('now')),
+  path TEXT,
+  pais TEXT,
+  referrer TEXT,
+  user_agent TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_visitas_ts ON visitas(ts);

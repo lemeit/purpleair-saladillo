@@ -18,6 +18,9 @@
  *   Los tres endpoints aceptan &formato=csv para descargar CSV en vez de JSON.
  *   Documentación con ejemplos: /api.html en aq.lemeit.ar
  *
+ *   GET /api/admin/visitas?key=...&limit=200  -> log crudo de accesos (requiere ADMIN_KEY)
+ *   GET /api/admin/resumen?key=...            -> totales + top paths/países (requiere ADMIN_KEY)
+ *
  * Ingesta (scheduled, ver [triggers] en wrangler.toml): reemplazó al cron de
  * GitHub Actions (`.github/workflows/purpleair-ingest.yml`) como camino
  * principal para PurpleAir.
@@ -316,6 +319,36 @@ function wantsCsv(url) {
   return (url.searchParams.get("formato") || "").toLowerCase() === "csv";
 }
 
+// ── Registro de visitas + admin básico ──────────────────────────────────────
+// Log mínimo de accesos (sin cookies ni terceros): cada GET público inserta
+// una fila en D1 con timestamp, path, país (lo resuelve Cloudflare gratis en
+// request.cf) y user-agent/referrer, en segundo plano (ctx.waitUntil) para
+// no demorar la respuesta real. Se excluyen /api/admin/* y los tiles del
+// mapa. Dos endpoints de solo lectura, protegidos por un secret compartido
+// (`wrangler secret put ADMIN_KEY`) — sin panel, solo JSON:
+//   GET /api/admin/visitas?key=...&limit=200   -> últimas N visitas, crudas
+//   GET /api/admin/resumen?key=...             -> totales + top paths/países
+function logVisita(env, ctx, request, path) {
+  if (!ctx || !ctx.waitUntil || !env.DB) return;
+  const cf = request.cf || {};
+  const pais = cf.country || null;
+  const referrer = (request.headers.get("Referer") || "").slice(0, 300) || null;
+  const userAgent = (request.headers.get("User-Agent") || "").slice(0, 300) || null;
+  ctx.waitUntil(
+    env.DB.prepare(
+      "INSERT INTO visitas (path, pais, referrer, user_agent) VALUES (?, ?, ?, ?)"
+    )
+      .bind(path, pais, referrer, userAgent)
+      .run()
+      .catch((err) => console.error(`logVisita: ${err.message}`))
+  );
+}
+
+function autorizadoAdmin(url, env) {
+  const key = url.searchParams.get("key");
+  return Boolean(env.ADMIN_KEY) && key === env.ADMIN_KEY;
+}
+
 // ── Proxy de tiles del mapa (CARTO Basemaps) ────────────────────────────────
 // CARTO ahora exige una API key para servir tiles. En vez de poner esa key
 // en el HTML público (cualquiera podría copiarla de "ver código fuente" y
@@ -342,7 +375,7 @@ async function proxyCartoTile(env, style, z, x, y, retina) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     if (request.method === "OPTIONS") {
       return new Response(null, { headers: CORS_HEADERS });
     }
@@ -354,6 +387,10 @@ export default {
     if (tileMatch) {
       const [, style, z, x, y, retina] = tileMatch;
       return proxyCartoTile(env, style, z, x, y, retina || "");
+    }
+
+    if (request.method === "GET" && !path.startsWith("/api/admin/")) {
+      logVisita(env, ctx, request, path);
     }
 
     try {
@@ -421,6 +458,37 @@ export default {
         }
         const resultado = await ingestAirGradient(env);
         return json(resultado, resultado.ok ? 200 : 502);
+      }
+
+      if (path === "/api/admin/visitas") {
+        if (!autorizadoAdmin(url, env)) return json({ error: "No autorizado" }, 401);
+        const limit = Math.min(parseInt(url.searchParams.get("limit") || "200", 10) || 200, 2000);
+        const { results } = await env.DB.prepare(
+          "SELECT id, ts, path, pais, referrer, user_agent FROM visitas ORDER BY id DESC LIMIT ?"
+        )
+          .bind(limit)
+          .all();
+        return json(results);
+      }
+
+      if (path === "/api/admin/resumen") {
+        if (!autorizadoAdmin(url, env)) return json({ error: "No autorizado" }, 401);
+        const [ultimas24h, ultimos7d, topPaths, topPaises] = await Promise.all([
+          env.DB.prepare("SELECT COUNT(*) AS n FROM visitas WHERE ts >= datetime('now', '-1 day')").first(),
+          env.DB.prepare("SELECT COUNT(*) AS n FROM visitas WHERE ts >= datetime('now', '-7 days')").first(),
+          env.DB.prepare(
+            "SELECT path, COUNT(*) AS n FROM visitas WHERE ts >= datetime('now', '-7 days') GROUP BY path ORDER BY n DESC LIMIT 10"
+          ).all(),
+          env.DB.prepare(
+            "SELECT pais, COUNT(*) AS n FROM visitas WHERE ts >= datetime('now', '-7 days') GROUP BY pais ORDER BY n DESC LIMIT 10"
+          ).all(),
+        ]);
+        return json({
+          visitas_ultimas_24h: ultimas24h.n,
+          visitas_ultimos_7d: ultimos7d.n,
+          top_paths_7d: topPaths.results,
+          top_paises_7d: topPaises.results,
+        });
       }
 
       return json({ error: "Not found" }, 404);
