@@ -18,8 +18,8 @@
  *   Los tres endpoints aceptan &formato=csv para descargar CSV en vez de JSON.
  *   Documentación con ejemplos: /api.html en aq.lemeit.ar
  *
- *   GET /api/admin/visitas?key=...&limit=200  -> log crudo de accesos (requiere ADMIN_KEY)
- *   GET /api/admin/resumen?key=...            -> totales + top paths/países (requiere ADMIN_KEY)
+ *   GET /api/admin/visitas?limit=200  -> log crudo de accesos (header X-Admin-Key, requiere ADMIN_KEY)
+ *   GET /api/admin/resumen            -> totales + top paths/países (header X-Admin-Key, requiere ADMIN_KEY)
  *
  * Ingesta (scheduled, ver [triggers] en wrangler.toml): reemplazó al cron de
  * GitHub Actions (`.github/workflows/purpleair-ingest.yml`) como camino
@@ -277,7 +277,7 @@ async function ingestAirGradient(env) {
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, X-Ingest-Key",
+  "Access-Control-Allow-Headers": "Content-Type, X-Ingest-Key, X-Admin-Key",
 };
 
 function json(data, status = 200) {
@@ -325,9 +325,10 @@ function wantsCsv(url) {
 // request.cf) y user-agent/referrer, en segundo plano (ctx.waitUntil) para
 // no demorar la respuesta real. Se excluyen /api/admin/* y los tiles del
 // mapa. Dos endpoints de solo lectura, protegidos por un secret compartido
-// (`wrangler secret put ADMIN_KEY`) — sin panel, solo JSON:
-//   GET /api/admin/visitas?key=...&limit=200   -> últimas N visitas, crudas
-//   GET /api/admin/resumen?key=...             -> totales + top paths/países
+// (`wrangler secret put ADMIN_KEY`) enviado como header `X-Admin-Key`
+// (mismo esquema que X-Ingest-Key en /api/ingest-ahora) — sin panel, solo JSON:
+//   GET /api/admin/visitas?limit=200   -> últimas N visitas, crudas
+//   GET /api/admin/resumen             -> totales + top paths/países
 function logVisita(env, ctx, request, path) {
   if (!ctx || !ctx.waitUntil || !env.DB) return;
   const cf = request.cf || {};
@@ -344,8 +345,8 @@ function logVisita(env, ctx, request, path) {
   );
 }
 
-function autorizadoAdmin(url, env) {
-  const key = url.searchParams.get("key");
+function autorizadoAdmin(request, env) {
+  const key = request.headers.get("X-Admin-Key");
   return Boolean(env.ADMIN_KEY) && key === env.ADMIN_KEY;
 }
 
@@ -461,7 +462,7 @@ export default {
       }
 
       if (path === "/api/admin/visitas") {
-        if (!autorizadoAdmin(url, env)) return json({ error: "No autorizado" }, 401);
+        if (!autorizadoAdmin(request, env)) return json({ error: "No autorizado" }, 401);
         const limit = Math.min(parseInt(url.searchParams.get("limit") || "200", 10) || 200, 2000);
         const { results } = await env.DB.prepare(
           "SELECT id, ts, path, pais, referrer, user_agent FROM visitas ORDER BY id DESC LIMIT ?"
@@ -472,7 +473,7 @@ export default {
       }
 
       if (path === "/api/admin/resumen") {
-        if (!autorizadoAdmin(url, env)) return json({ error: "No autorizado" }, 401);
+        if (!autorizadoAdmin(request, env)) return json({ error: "No autorizado" }, 401);
         const [ultimas24h, ultimos7d, topPaths, topPaises] = await Promise.all([
           env.DB.prepare("SELECT COUNT(*) AS n FROM visitas WHERE ts >= datetime('now', '-1 day')").first(),
           env.DB.prepare("SELECT COUNT(*) AS n FROM visitas WHERE ts >= datetime('now', '-7 days')").first(),

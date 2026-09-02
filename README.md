@@ -139,17 +139,17 @@ Si un sensor deja de reportar lecturas nuevas hace más de 25 minutos (se descon
 
 Sin agregar ningún panel: cada GET a un endpoint público (`/api/sensores`, `/api/ultimas`, `/api/historico/:index`) queda registrado en la tabla `visitas` de D1 — timestamp, ruta, país (lo resuelve Cloudflare gratis, sin geolocalizar IPs a mano) y user-agent/referrer. Se escribe en segundo plano (`ctx.waitUntil`), así que no demora la respuesta real, y no toca ni cookies ni nada del lado del navegador.
 
-Para consultarlo, dos endpoints de solo lectura protegidos por el secret `ADMIN_KEY` (`wrangler secret put ADMIN_KEY`, dentro de `worker/`):
+Para consultarlo, dos endpoints de solo lectura protegidos por el secret `ADMIN_KEY` (`wrangler secret put ADMIN_KEY`, dentro de `worker/`), enviado como header `X-Admin-Key` (mismo esquema que `X-Ingest-Key` en `/api/ingest-ahora`):
 
 ```
-GET /api/admin/resumen?key=TU_ADMIN_KEY
+curl -H "X-Admin-Key: TU_ADMIN_KEY" https://purpleair-saladillo-api.fisicai-eureka-01.workers.dev/api/admin/resumen
     -> visitas de las últimas 24h y 7 días, top 10 rutas y top 10 países (7 días)
 
-GET /api/admin/visitas?key=TU_ADMIN_KEY&limit=200
+curl -H "X-Admin-Key: TU_ADMIN_KEY" "https://purpleair-saladillo-api.fisicai-eureka-01.workers.dev/api/admin/visitas?limit=200"
     -> las últimas N visitas, una por una (default 200, máximo 2000)
 ```
 
-Se abren directo en el navegador (o con `curl`) — no hace falta ningún panel de administración. Para algo más agregado (visitas a `index.html` en sí, no solo a la API, más navegadores/dispositivos, etc.), Cloudflare ya trae analíticas propias sin tocar código: **Cloudflare dashboard → Workers & Pages → el proyecto de Pages (`aq.lemeit.ar`) → pestaña "Analytics"** muestra requests y visitantes únicos de la web estática; para el Worker de la API, la pestaña "Metrics" del Worker muestra lo mismo a nivel de requests. Ninguna de las dos requiere activar nada.
+Al ir por header (no por `?key=...` en la URL), no queda pegado en el historial del navegador ni en logs — pero por lo mismo ya no se puede abrir pegando la URL en la barra de direcciones, hace falta `curl` (o similar) para poder mandar el header. Para algo más agregado (visitas a `index.html` en sí, no solo a la API, más navegadores/dispositivos, etc.), Cloudflare ya trae analíticas propias sin tocar código: **Cloudflare dashboard → Workers & Pages → el proyecto de Pages (`aq.lemeit.ar`) → pestaña "Analytics"** muestra requests y visitantes únicos de la web estática; para el Worker de la API, la pestaña "Metrics" del Worker muestra lo mismo a nivel de requests. Ninguna de las dos requiere activar nada.
 
 Este mismo esquema (migración + dos endpoints) se puede replicar igual en `ema-saladillo` y `agua-saladillo` si hace falta — son el mismo patrón de Worker + D1.
 
