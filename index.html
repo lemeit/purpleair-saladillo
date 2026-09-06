@@ -479,6 +479,54 @@
   td.muted { color: var(--text-dim); font-size: 11px; }
   .loader { text-align: center; padding: 32px; font-family: var(--font-display); font-size: 12px; color: var(--text-dim); }
 
+  /* ── Toggle Clásica/Reporte + filtro de parámetros (pestaña Historial) ── */
+  .view-toggle { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .view-btn {
+    font-family: var(--font-display); font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
+    color: var(--text-dim); background: var(--bg); border: none; padding: 5px 10px; cursor: pointer;
+  }
+  .view-btn + .view-btn { border-left: 1px solid var(--border); }
+  .view-btn.active { background: var(--accent); color: #fff; }
+
+  .param-filter {
+    display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 8px 14px;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--font-display); font-size: 10px; color: var(--text-dim);
+  }
+  .param-filter label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
+  .param-filter:empty { display: none; padding: 0; border-bottom: none; }
+
+  /* ── Vista "Reporte" (pestaña Historial) — imitación de listado de texto
+     plano/fuente retro, tipo resumen climatológico de estación meteorológica
+     (ver chajarialdia.com.ar/estacion). Fondo papel fijo a propósito: no
+     sigue el tema claro/oscuro del resto del sitio, es deliberadamente
+     "hoja impresa" siempre. ── */
+  .report-view {
+    background: #F3EFE4; color: #1A1712;
+    font-family: "JetBrains Mono", "Courier New", monospace;
+    font-size: 12px; line-height: 1.55;
+    padding: 16px 18px 20px; overflow-x: auto;
+  }
+  .report-view table { width: 100%; border-collapse: collapse; white-space: nowrap; }
+  .report-view th, .report-view td {
+    padding: 3px 10px; text-align: right;
+    font-family: inherit; font-size: inherit; color: inherit;
+    border: none; background: none;
+  }
+  .report-view th:first-child, .report-view td:first-child { text-align: left; padding-left: 0; }
+  .report-view thead th {
+    border-bottom: 1px dashed #C9C0AC; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .02em;
+  }
+  .report-view tbody tr td { border-bottom: 1px dotted #D9D2C2; }
+  .report-view tbody tr:last-child td { border-bottom: none; }
+  .report-view tr:hover td { background: none; }
+  .report-view .report-meta {
+    display: flex; flex-wrap: wrap; gap: 4px 24px;
+    margin-bottom: 12px; font-size: 11.5px; color: #5A5142;
+  }
+  .report-view .report-meta b { color: #000; }
+
   /* ── GRÁFICO (chart-wrap, igual que EMA) ── */
   .chart-wrap { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
   .chart-hdr { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
@@ -627,12 +675,21 @@
       <div class="table-hdr">
         <h2 id="hist-titulo">Seleccioná una institución para ver el histórico</h2>
         <select class="sel" id="sel-sensor-hist" onchange="onSensorSelect(this.value)"></select>
-        <select class="sel" id="sel-range-hist" onchange="loadHistorialTable()">
+        <select class="sel" id="sel-range-hist" onchange="onHistRangeChange()">
           <option value="24h">24 h</option>
           <option value="7d">7 días</option>
           <option value="30d">30 días</option>
+          <option value="custom">Rango de fechas…</option>
         </select>
+        <input type="date" class="sel" id="hist-desde" style="display:none" onchange="loadHistorialTable()">
+        <input type="date" class="sel" id="hist-hasta" style="display:none" onchange="loadHistorialTable()">
+        <div class="view-toggle" id="hist-view-toggle">
+          <button type="button" class="view-btn active" data-view="normal" onclick="setHistView('normal')">Clásica</button>
+          <button type="button" class="view-btn" data-view="retro" onclick="setHistView('retro')">Reporte</button>
+        </div>
+        <button class="export-btn" id="hist-export-btn" onclick="downloadHistorialCsv()">Descargar CSV</button>
       </div>
+      <div class="param-filter" id="hist-param-filter"></div>
       <div id="tabla-wrap"><div class="loader">—</div></div>
     </div>
   </div>
@@ -1471,51 +1528,161 @@
     }
   }
 
+  // ── Pestaña Historial: columnas, filtro de parámetros, rango de fechas
+  // personalizado, vista "Clásica" (la de siempre) y vista "Reporte" (texto
+  // plano / fuente retro, ver .report-view en el CSS). ──
+  let histRows = [];
+  let histViewMode = "normal"; // "normal" | "retro"
+  let histHiddenParams = new Set(); // claves ocultadas a mano desde el filtro
+
+  const HIST_COLS = [
+    { key: "pm2_5", label: "PM2.5", unit: "µg/m³" },
+    { key: "temperatura", label: "Temp.", unit: "°C" },
+    { key: "humedad", label: "Humedad", unit: "%" },
+    { key: "presion", label: "Presión", unit: "hPa" },
+    // VOC/CO2/NOx solo los reportan algunos sensores (VOC: PurpleAir
+    // Flex/Zen/Touch; CO2 y NOx: AirGradient) — "opcional" hace que solo se
+    // muestren (columna y checkbox) si hay al menos un dato en el rango.
+    { key: "voc", label: "VOC", unit: "índice", opcional: true },
+    { key: "co2", label: "CO2", unit: "ppm", opcional: true },
+    { key: "nox", label: "NOx", unit: "índice", opcional: true },
+  ];
+
+  function onHistRangeChange() {
+    const custom = document.getElementById("sel-range-hist").value === "custom";
+    document.getElementById("hist-desde").style.display = custom ? "" : "none";
+    document.getElementById("hist-hasta").style.display = custom ? "" : "none";
+    if (!custom) loadHistorialTable();
+    // si es "custom" esperamos a que el usuario complete las dos fechas —
+    // el onchange de esos inputs ya llama a loadHistorialTable().
+  }
+
+  function setHistView(mode) {
+    histViewMode = mode;
+    document.querySelectorAll("#hist-view-toggle .view-btn").forEach((b) => {
+      b.classList.toggle("active", b.dataset.view === mode);
+    });
+    renderHistTable();
+  }
+
+  // Arma el query string contra la API a partir de los controles actuales.
+  // Devuelve null si el usuario eligió "rango de fechas" pero todavía no
+  // completó las dos fechas (para no pedirle nada a la API a medio llenar).
+  function histQueryParams() {
+    const range = document.getElementById("sel-range-hist").value;
+    if (range === "custom") {
+      const desde = document.getElementById("hist-desde").value;
+      const hasta = document.getElementById("hist-hasta").value;
+      if (!desde || !hasta) return null;
+      return `desde=${desde}&hasta=${hasta}`;
+    }
+    return `range=${range}`;
+  }
+
+  function histRangoTexto() {
+    const range = document.getElementById("sel-range-hist").value;
+    if (range === "custom") {
+      const desde = document.getElementById("hist-desde").value;
+      const hasta = document.getElementById("hist-hasta").value;
+      return desde && hasta ? `${desde} a ${hasta}` : "—";
+    }
+    return { "24h": "últimas 24 h", "7d": "últimos 7 días", "30d": "últimos 30 días" }[range] || range;
+  }
+
   async function loadHistorialTable() {
     if (currentSensorIndex == null) return;
-    const range = document.getElementById("sel-range-hist").value;
+    const qp = histQueryParams();
+    if (qp === null) return;
     document.getElementById("tabla-wrap").innerHTML = '<div class="loader">Cargando...</div>';
     try {
-      const res = await fetch(`${API_BASE}/api/historico/${currentSensorIndex}?range=${range}`);
+      const res = await fetch(`${API_BASE}/api/historico/${currentSensorIndex}?${qp}`);
       const rows = await res.json();
+      histRows = rows;
       if (!rows.length) {
+        document.getElementById("hist-param-filter").innerHTML = "";
         document.getElementById("tabla-wrap").innerHTML = '<div class="loader">Sin datos.</div>';
         return;
       }
-      // VOC solo lo reportan algunos sensores (PurpleAir Flex/Zen/Touch) —
-      // mostramos esa columna únicamente si hay al menos un dato en el rango.
-      // CO2 y NOx siguen el mismo criterio (solo sensores AirGradient).
-      const hasVoc = rows.some((r) => r.voc != null);
-      const hasCo2 = rows.some((r) => r.co2 != null);
-      const hasNox = rows.some((r) => r.nox != null);
-      const filas = rows.slice().reverse().map((r) => `<tr>
-          <td class="muted">${formatBsAsFull(r.timestamp)}</td>
-          <td class="num">${r.pm2_5 ?? "—"}</td>
-          <td>${r.temperatura ?? "—"}</td>
-          <td>${r.humedad ?? "—"}</td>
-          <td>${r.presion ?? "—"}</td>
-          ${hasVoc ? `<td>${r.voc ?? "—"}</td>` : ""}
-          ${hasCo2 ? `<td>${r.co2 ?? "—"}</td>` : ""}
-          ${hasNox ? `<td>${r.nox ?? "—"}</td>` : ""}
-        </tr>`).join("");
-      document.getElementById("tabla-wrap").innerHTML = `
-        <table>
-          <thead><tr>
-            <th>Fecha / hora</th>
-            <th>PM2.5 <span class="th-unit">(µg/m³)</span></th>
-            <th>Temp. <span class="th-unit">(°C)</span></th>
-            <th>Humedad <span class="th-unit">(%)</span></th>
-            <th>Presión <span class="th-unit">(hPa)</span></th>
-            ${hasVoc ? `<th>VOC <span class="th-unit">(índice)</span></th>` : ""}
-            ${hasCo2 ? `<th>CO2 <span class="th-unit">(ppm)</span></th>` : ""}
-            ${hasNox ? `<th>NOx <span class="th-unit">(índice)</span></th>` : ""}
-          </tr></thead>
-          <tbody>${filas}</tbody>
-        </table>`;
+      renderHistParamFilter();
+      renderHistTable();
     } catch (e) {
       document.getElementById("tabla-wrap").innerHTML =
         `<div class="loader" style="color:var(--unhealthy)">Error: ${e.message}</div>`;
     }
+  }
+
+  function histDisponibles() {
+    return HIST_COLS.filter((c) => !c.opcional || histRows.some((r) => r[c.key] != null));
+  }
+
+  function histColsVisibles() {
+    return histDisponibles().filter((c) => !histHiddenParams.has(c.key));
+  }
+
+  function renderHistParamFilter() {
+    document.getElementById("hist-param-filter").innerHTML = histDisponibles().map((c) => `
+      <label>
+        <input type="checkbox" ${histHiddenParams.has(c.key) ? "" : "checked"}
+          onchange="toggleHistParam('${c.key}', this.checked)">
+        ${c.label}
+      </label>
+    `).join("");
+  }
+
+  function toggleHistParam(key, visible) {
+    if (visible) histHiddenParams.delete(key);
+    else histHiddenParams.add(key);
+    renderHistTable();
+  }
+
+  function renderHistTable() {
+    const cols = histColsVisibles();
+    document.getElementById("tabla-wrap").innerHTML =
+      histViewMode === "retro" ? renderTablaRetro(cols) : renderTablaNormal(cols);
+  }
+
+  function renderTablaNormal(cols) {
+    const filas = histRows.slice().reverse().map((r) => `<tr>
+        <td class="muted">${formatBsAsFull(r.timestamp)}</td>
+        ${cols.map((c) => `<td${c.key === "pm2_5" ? ' class="num"' : ""}>${r[c.key] ?? "—"}</td>`).join("")}
+      </tr>`).join("");
+    const headers = cols.map((c) => `<th>${c.label} <span class="th-unit">(${c.unit})</span></th>`).join("");
+    return `
+      <table>
+        <thead><tr><th>Fecha / hora</th>${headers}</tr></thead>
+        <tbody>${filas}</tbody>
+      </table>`;
+  }
+
+  // Vista "Reporte": texto plano/fuente retro, tipo resumen climatológico de
+  // estación meteorológica (inspirado en chajarialdia.com.ar/estacion) —
+  // fondo papel fijo, mayúsculas, líneas de guiones en vez de bordes.
+  function renderTablaRetro(cols) {
+    const filas = histRows.slice().reverse().map((r) => `<tr>
+        <td>${formatBsAsFull(r.timestamp)}</td>
+        ${cols.map((c) => `<td>${r[c.key] ?? "—"}</td>`).join("")}
+      </tr>`).join("");
+    const headers = cols.map((c) => `<th>${c.label.toUpperCase()} (${c.unit})</th>`).join("");
+    return `
+      <div class="report-view">
+        <div class="report-meta">
+          <span><b>ESTACIÓN:</b> ${currentLabel || "—"}</span>
+          <span><b>SENSOR:</b> #${currentSensorIndex}</span>
+          <span><b>RANGO:</b> ${histRangoTexto()}</span>
+          <span><b>REGISTROS:</b> ${histRows.length}</span>
+        </div>
+        <table>
+          <thead><tr><th>FECHA / HORA</th>${headers}</tr></thead>
+          <tbody>${filas}</tbody>
+        </table>
+      </div>`;
+  }
+
+  function downloadHistorialCsv() {
+    if (currentSensorIndex == null) return;
+    const qp = histQueryParams();
+    if (qp === null) return;
+    window.open(`${API_BASE}/api/historico/${currentSensorIndex}?${qp}&formato=csv`, "_blank");
   }
 
   function renderChart(rows) {
