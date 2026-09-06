@@ -13,6 +13,7 @@
 <link rel="stylesheet" href="https://design.lemeit.ar/lemeit-theme.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js"></script>
 <script src="https://design.lemeit.ar/lemeit-common.js"></script>
 <script>
   // Aplicar el tema ANTES de pintar la página para evitar flash de color equivocado.
@@ -688,6 +689,7 @@
           <button type="button" class="view-btn" data-view="retro" onclick="setHistView('retro')">Reporte</button>
         </div>
         <button class="export-btn" id="hist-export-btn" onclick="downloadHistorialCsv()">Descargar CSV</button>
+        <button class="export-btn" id="hist-export-pdf-btn" onclick="downloadHistorialPdf()">Descargar PDF (reporte)</button>
       </div>
       <div class="param-filter" id="hist-param-filter"></div>
       <div id="tabla-wrap"><div class="loader">—</div></div>
@@ -1683,6 +1685,104 @@
     const qp = histQueryParams();
     if (qp === null) return;
     window.open(`${API_BASE}/api/historico/${currentSensorIndex}?${qp}&formato=csv`, "_blank");
+  }
+
+  // Fecha/hora en ancho fijo (a diferencia de formatBsAsFull, que usa
+  // formato local variable en longitud "6/9, 02:00 p. m.") — necesario para
+  // que las columnas del PDF de texto plano queden alineadas de verdad.
+  function formatBsAsFixed(timestampStr) {
+    // Defensivo: un timestamp corrupto en una sola fila no debe tirar abajo
+    // la generación completa del PDF (ver histRows.forEach en downloadHistorialPdf).
+    try {
+      const d = toBsAs(timestampStr);
+      const parts = new Intl.DateTimeFormat("es-AR", {
+        timeZone: "America/Argentina/Buenos_Aires",
+        day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false,
+      }).formatToParts(d);
+      const get = (t) => parts.find((p) => p.type === t).value;
+      return `${get("day")}/${get("month")}/${get("year")} ${get("hour")}:${get("minute")}`;
+    } catch (e) {
+      return String(timestampStr);
+    }
+  }
+
+  function padRight(s, n) { s = String(s); return s.length >= n ? s.slice(0, n) : s + " ".repeat(n - s.length); }
+  function padLeft(s, n) { s = String(s); return s.length >= n ? s.slice(0, n) : " ".repeat(n - s.length) + s; }
+
+  // Descarga el mismo listado en PDF de texto plano/fuente monoespaciada,
+  // estilo resumen climatologico de estacion meteorologica (inspirado en
+  // chajarialdia.com.ar/estacion) — siempre en ese formato "reporte",
+  // independientemente de si en pantalla esta puesta la vista Clasica o
+  // Reporte. Usa jsPDF con la fuente Courier incorporada (sin embeber
+  // archivos de fuente aparte).
+  function downloadHistorialPdf() {
+    if (!histRows.length || currentSensorIndex == null) return;
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: "pt", format: "a4", orientation: "landscape" });
+    const fontSize = 9;
+    doc.setFont("courier", "normal");
+    doc.setFontSize(fontSize);
+    const lineHeight = fontSize * 1.4;
+    const marginLeft = 36;
+    const marginTop = 40;
+    const pageBottom = doc.internal.pageSize.getHeight() - 36;
+    let y = marginTop;
+
+    const cols = histColsVisibles();
+    const colDefs = [
+      { key: "_ts", header: "FECHA / HORA", width: 17, align: "left" },
+      ...cols.map((c) => ({
+        key: c.key,
+        header: `${c.label.toUpperCase()} (${c.unit})`,
+        width: Math.max(c.label.length + c.unit.length + 5, 11),
+        align: "right",
+      })),
+    ];
+
+    function fila(valores) {
+      return colDefs.map((c, i) => {
+        const v = valores[i];
+        return c.align === "left" ? padRight(v, c.width) : padLeft(v, c.width);
+      }).join(" ");
+    }
+
+    function printHeaderBlock() {
+      doc.setFont("courier", "bold");
+      doc.text("REGISTRO HISTORICO — CIENCIA CIUDADANA AMBIENTAL", marginLeft, y);
+      y += lineHeight * 1.3;
+      doc.setFont("courier", "normal");
+      doc.text(`ESTACION: ${currentLabel || "-"}    SENSOR: #${currentSensorIndex}    RANGO: ${histRangoTexto()}    REGISTROS: ${histRows.length}`, marginLeft, y);
+      y += lineHeight * 1.6;
+      printColHeaders();
+    }
+
+    function printColHeaders() {
+      doc.setFont("courier", "bold");
+      doc.text(fila(colDefs.map((c) => c.header)), marginLeft, y);
+      y += lineHeight * 0.9;
+      doc.text("-".repeat(colDefs.reduce((n, c) => n + c.width + 1, 0)), marginLeft, y);
+      y += lineHeight;
+      doc.setFont("courier", "normal");
+    }
+
+    function checkPageBreak() {
+      if (y > pageBottom) {
+        doc.addPage();
+        y = marginTop;
+        printColHeaders();
+      }
+    }
+
+    printHeaderBlock();
+    histRows.slice().reverse().forEach((r) => {
+      checkPageBreak();
+      const valores = [formatBsAsFixed(r.timestamp), ...cols.map((c) => (r[c.key] ?? "-").toString())];
+      doc.text(fila(valores), marginLeft, y);
+      y += lineHeight;
+    });
+
+    const nombreArchivo = `${(currentLabel || "sensor").replace(/\s+/g, "_")}_historico_reporte.pdf`;
+    doc.save(nombreArchivo);
   }
 
   function renderChart(rows) {
