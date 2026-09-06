@@ -13,7 +13,7 @@
 <link rel="stylesheet" href="https://design.lemeit.ar/lemeit-theme.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js" onerror="this.onerror=null;var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js';document.head.appendChild(s);"></script>
 <script src="https://design.lemeit.ar/lemeit-common.js"></script>
 <script>
   // Aplicar el tema ANTES de pintar la página para evitar flash de color equivocado.
@@ -1717,6 +1717,10 @@
   // archivos de fuente aparte).
   function downloadHistorialPdf() {
     if (!histRows.length || currentSensorIndex == null) return;
+    if (!window.jspdf || !window.jspdf.jsPDF) {
+      alert("No se pudo cargar el generador de PDF (jsPDF). Puede ser el bloqueador de anuncios/contenido del navegador, o que se haya cortado la conexion a internet. Probá recargar la página o desactivar el bloqueador para este sitio y volvé a intentar.");
+      return;
+    }
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ unit: "pt", format: "a4", orientation: "landscape" });
     const fontSize = 9;
