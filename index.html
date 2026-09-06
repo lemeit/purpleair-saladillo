@@ -1538,7 +1538,12 @@
   let histHiddenParams = new Set(); // claves ocultadas a mano desde el filtro
 
   const HIST_COLS = [
+    // PM1.0/PM10 los reportan tanto PurpleAir como AirGradient (igual que
+    // PM2.5) — "opcional" los deja afuera solo si de verdad no hay dato en
+    // el rango, sin asumir que todos los sensores los mandan siempre.
+    { key: "pm1_0", label: "PM1.0", unit: "µg/m³", opcional: true },
     { key: "pm2_5", label: "PM2.5", unit: "µg/m³" },
+    { key: "pm10_0", label: "PM10", unit: "µg/m³", opcional: true },
     { key: "temperatura", label: "Temp.", unit: "°C" },
     { key: "humedad", label: "Humedad", unit: "%" },
     { key: "presion", label: "Presión", unit: "hPa" },
