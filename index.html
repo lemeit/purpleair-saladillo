@@ -60,6 +60,10 @@
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
+  /* Color de tilde de todos los checkboxes del sitio — sin esto el navegador
+     usa su azul por defecto, que desentona fuerte con la paleta naranja. */
+  input[type="checkbox"] { accent-color: var(--accent); }
+
   /* Sin esto, al arrastrar/panear el mapa (Leaflet) el navegador puede
      interpretar el gesto como "mover toda la página" en vez de solo el
      mapa, corriendo el resto del layout hacia el costado. */
@@ -480,15 +484,7 @@
   td.muted { color: var(--text-dim); font-size: 11px; }
   .loader { text-align: center; padding: 32px; font-family: var(--font-display); font-size: 12px; color: var(--text-dim); }
 
-  /* ── Toggle Clásica/Reporte + filtro de parámetros (pestaña Historial) ── */
-  .view-toggle { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
-  .view-btn {
-    font-family: var(--font-display); font-size: 10px; text-transform: uppercase; letter-spacing: .04em;
-    color: var(--text-dim); background: var(--bg); border: none; padding: 5px 10px; cursor: pointer;
-  }
-  .view-btn + .view-btn { border-left: 1px solid var(--border); }
-  .view-btn.active { background: var(--accent); color: #fff; }
-
+  /* ── Filtro de parámetros (pestaña Historial) ── */
   .param-filter {
     display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 8px 14px;
     border-bottom: 1px solid var(--border);
@@ -496,37 +492,6 @@
   }
   .param-filter label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
   .param-filter:empty { display: none; padding: 0; border-bottom: none; }
-
-  /* ── Vista "Reporte" (pestaña Historial) — imitación de listado de texto
-     plano/fuente retro, tipo resumen climatológico de estación meteorológica
-     (ver chajarialdia.com.ar/estacion). Fondo papel fijo a propósito: no
-     sigue el tema claro/oscuro del resto del sitio, es deliberadamente
-     "hoja impresa" siempre. ── */
-  .report-view {
-    background: #F3EFE4; color: #1A1712;
-    font-family: "JetBrains Mono", "Courier New", monospace;
-    font-size: 12px; line-height: 1.55;
-    padding: 16px 18px 20px; overflow-x: auto;
-  }
-  .report-view table { width: 100%; border-collapse: collapse; white-space: nowrap; }
-  .report-view th, .report-view td {
-    padding: 3px 10px; text-align: right;
-    font-family: inherit; font-size: inherit; color: inherit;
-    border: none; background: none;
-  }
-  .report-view th:first-child, .report-view td:first-child { text-align: left; padding-left: 0; }
-  .report-view thead th {
-    border-bottom: 1px dashed #C9C0AC; font-weight: 700;
-    text-transform: uppercase; letter-spacing: .02em;
-  }
-  .report-view tbody tr td { border-bottom: 1px dotted #D9D2C2; }
-  .report-view tbody tr:last-child td { border-bottom: none; }
-  .report-view tr:hover td { background: none; }
-  .report-view .report-meta {
-    display: flex; flex-wrap: wrap; gap: 4px 24px;
-    margin-bottom: 12px; font-size: 11.5px; color: #5A5142;
-  }
-  .report-view .report-meta b { color: #000; }
 
   /* ── GRÁFICO (chart-wrap, igual que EMA) ── */
   .chart-wrap { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
@@ -565,6 +530,19 @@
     align-items: center;
     gap: 6px;
     cursor: pointer;
+  }
+
+  /* Checkbox "Comparar sitios", en el header de la pestaña Gráfico junto a
+     los selectores de sensor/rango. */
+  .compare-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-display);
+    font-size: 10px;
+    color: var(--text-dim);
+    cursor: pointer;
+    white-space: nowrap;
   }
 
   /* ── Selector multi-parámetro (pestaña Gráfico) ── */
@@ -684,10 +662,6 @@
         </select>
         <input type="date" class="sel" id="hist-desde" style="display:none" onchange="loadHistorialTable()">
         <input type="date" class="sel" id="hist-hasta" style="display:none" onchange="loadHistorialTable()">
-        <div class="view-toggle" id="hist-view-toggle">
-          <button type="button" class="view-btn active" data-view="normal" onclick="setHistView('normal')">Clásica</button>
-          <button type="button" class="view-btn" data-view="retro" onclick="setHistView('retro')">Reporte</button>
-        </div>
         <button class="export-btn" id="hist-export-btn" onclick="downloadHistorialCsv()">Descargar CSV</button>
         <button class="export-btn" id="hist-export-pdf-btn" onclick="downloadHistorialPdf()">Descargar PDF (reporte)</button>
       </div>
@@ -702,19 +676,28 @@
       <div class="chart-hdr">
         <h2 id="graf-titulo">Seleccioná una institución para ver el histórico</h2>
         <select class="sel" id="sel-sensor-grafico" onchange="onSensorSelect(this.value)"></select>
-        <select class="sel" id="sel-range-chart" onchange="loadHistory()">
+        <select class="sel" id="sel-range-chart" onchange="onGraficoRangeChange()">
           <option value="24h">24 h</option>
           <option value="7d">7 días</option>
           <option value="30d">30 días</option>
         </select>
+        <label class="compare-toggle">
+          <input type="checkbox" id="toggle-compare-sitios" onchange="onToggleCompareSitios(this.checked)">
+          Comparar sitios
+        </label>
         <button class="export-btn" id="export-btn">Exportar CSV</button>
       </div>
       <div class="param-toggle" id="param-toggle"></div>
+      <!-- Filtro de sitios a comparar — solo visible con "Comparar sitios"
+           tildado; en ese modo el selector de sitio único de arriba se
+           oculta y el filtro de parámetros pasa a comportarse como uno
+           solo a la vez (ver onToggleCompareSitios). -->
+      <div class="param-filter" id="grafico-sitios-filter" style="display:none"></div>
       <div class="chart-canvas-wrap">
         <canvas id="history-chart" style="position:absolute;top:0;left:0;width:100%;height:100%"></canvas>
         <div class="loader" id="chart-empty" style="display:none;position:absolute;top:0;left:0;right:0;bottom:0;align-items:center;justify-content:center">Este sensor no tiene datos en el rango seleccionado.</div>
       </div>
-      <div class="channel-toggle">
+      <div class="channel-toggle" id="channel-toggle-wrap">
         <label><input type="checkbox" id="toggle-channels" /> Mostrar canales A/B por separado (PM1.0/PM2.5/PM10 seleccionados)</label>
       </div>
     </div>
@@ -792,6 +775,20 @@
   let mapaInst = null;
   let mapaTileLayer = null;
 
+  // ── Modo "Comparar sitios" (pestaña Gráfico): un solo parámetro, varias
+  // instituciones a la vez, una línea de color por sitio. Independiente del
+  // modo normal (currentSensorIndex/currentRows), que sigue funcionando
+  // igual que siempre para Historial, Actuales y el mini-gráfico. ──
+  let compareMode = false;
+  let compareSensorIndexes = new Set();
+  let compareRowsBySite = {}; // { [sensor_index]: filas del rango actual }
+  const SITE_COLORS = ["#D9691F", "#5B8DEF", "#8FB56B", "#A88FD9", "#D9736F", "#4FB0C6", "#D9A441", "#B8D94F"];
+  function siteColor(i) { return SITE_COLORS[i % SITE_COLORS.length]; }
+  function siteLabel(sensorIndex) {
+    const s = latestSensors.find((x) => x.sensor_index === sensorIndex);
+    return (s && (s.institucion || s.nombre)) || `Sitio #${sensorIndex}`;
+  }
+
   // Insignia de proveedor en el borde inferior de cada tarjeta (Actuales y
   // Mapa) — usa la columna "proveedor" que devuelve /api/ultimas. Si todavía
   // no está poblada para algún sensor viejo de PurpleAir, se asume
@@ -848,7 +845,19 @@
       </label>`;
     }).join("");
     box.addEventListener("change", (e) => {
-      if (e.target.classList.contains("chart-param-cb")) renderChart(currentRows);
+      if (!e.target.classList.contains("chart-param-cb")) return;
+      if (compareMode) {
+        // En modo comparación de sitios el gráfico es de un solo parámetro
+        // a la vez (varios sitios superpuestos ya usan toda la escala Y) —
+        // el filtro se comporta como radio buttons.
+        document.querySelectorAll(".chart-param-cb").forEach((cb) => {
+          if (cb !== e.target) cb.checked = false;
+        });
+        e.target.checked = true; // no permitir dejar el filtro sin nada tildado
+        loadCompareHistory();
+      } else {
+        renderChart(currentRows);
+      }
     });
   }
 
@@ -857,6 +866,13 @@
       .filter((cb) => cb.checked)
       .map((cb) => cb.value);
     return checked.length ? checked : ["pm2_5"]; // nunca un gráfico vacío
+  }
+
+  // En modo "Comparar sitios" el filtro de parámetros funciona como radio
+  // buttons (ver buildParamToggle), así que siempre hay como mucho uno
+  // tildado — se reusa getSelectedChartParams() y se toma el primero.
+  function getCompareParam() {
+    return getSelectedChartParams()[0];
   }
 
   const AQI_BANDS = [
@@ -1388,6 +1404,7 @@
       if (el) el.innerHTML = opts;
     });
     syncSensorSelectors();
+    if (compareMode) renderGraficoSitiosFilter();
   }
 
   function syncSensorSelectors() {
@@ -1498,43 +1515,122 @@
       // El checkbox de VOC solo tiene sentido si el sensor seleccionado lo
       // reporta (PurpleAir Flex/Zen/Touch) — se oculta y se destilda si no,
       // mismo criterio que en la tarjeta y en el selector de capa del mapa.
-      // CO2 y NOx siguen el mismo criterio (solo los reportan sensores AirGradient).
-      const vocItem = document.querySelector('#param-toggle [data-param="voc"]');
-      if (vocItem) {
-        const hasVoc = currentRows.some((r) => r.voc != null);
-        vocItem.style.display = hasVoc ? "" : "none";
-        const vocCb = vocItem.querySelector("input");
-        if (!hasVoc && vocCb.checked) vocCb.checked = false;
-      }
-      const co2Item = document.querySelector('#param-toggle [data-param="co2"]');
-      if (co2Item) {
-        const hasCo2 = currentRows.some((r) => r.co2 != null);
-        co2Item.style.display = hasCo2 ? "" : "none";
-        const co2Cb = co2Item.querySelector("input");
-        if (!hasCo2 && co2Cb.checked) co2Cb.checked = false;
-      }
-      const noxItem = document.querySelector('#param-toggle [data-param="nox"]');
-      if (noxItem) {
-        const hasNox = currentRows.some((r) => r.nox != null);
-        noxItem.style.display = hasNox ? "" : "none";
-        const noxCb = noxItem.querySelector("input");
-        if (!hasNox && noxCb.checked) noxCb.checked = false;
+      // CO2 y NOx siguen el mismo criterio (solo los reportan sensores
+      // AirGradient). En modo "Comparar sitios" NO se ocultan: cada sitio
+      // comparado puede ser de un proveedor distinto, así que el filtro
+      // deja elegir cualquier parámetro (ver renderChartCompare).
+      if (!compareMode) {
+        const vocItem = document.querySelector('#param-toggle [data-param="voc"]');
+        if (vocItem) {
+          const hasVoc = currentRows.some((r) => r.voc != null);
+          vocItem.style.display = hasVoc ? "" : "none";
+          const vocCb = vocItem.querySelector("input");
+          if (!hasVoc && vocCb.checked) vocCb.checked = false;
+        }
+        const co2Item = document.querySelector('#param-toggle [data-param="co2"]');
+        if (co2Item) {
+          const hasCo2 = currentRows.some((r) => r.co2 != null);
+          co2Item.style.display = hasCo2 ? "" : "none";
+          const co2Cb = co2Item.querySelector("input");
+          if (!hasCo2 && co2Cb.checked) co2Cb.checked = false;
+        }
+        const noxItem = document.querySelector('#param-toggle [data-param="nox"]');
+        if (noxItem) {
+          const hasNox = currentRows.some((r) => r.nox != null);
+          noxItem.style.display = hasNox ? "" : "none";
+          const noxCb = noxItem.querySelector("input");
+          if (!hasNox && noxCb.checked) noxCb.checked = false;
+        }
       }
 
-      const chartEmpty = document.getElementById("chart-empty");
-      if (chartEmpty) chartEmpty.style.display = currentRows.length ? "none" : "flex";
-
-      renderChart(currentRows);
+      if (!compareMode) {
+        const chartEmpty = document.getElementById("chart-empty");
+        if (chartEmpty) chartEmpty.style.display = currentRows.length ? "none" : "flex";
+        renderChart(currentRows);
+      }
     } catch (err) {
       console.error(err);
     }
   }
 
-  // ── Pestaña Historial: columnas, filtro de parámetros, rango de fechas
-  // personalizado, vista "Clásica" (la de siempre) y vista "Reporte" (texto
-  // plano / fuente retro, ver .report-view en el CSS). ──
+  // ── Modo "Comparar sitios" ──
+
+  function onGraficoRangeChange() {
+    if (compareMode) loadCompareHistory();
+    else loadHistory();
+  }
+
+  function onToggleCompareSitios(checked) {
+    compareMode = checked;
+    document.getElementById("sel-sensor-grafico").style.display = checked ? "none" : "";
+    document.getElementById("grafico-sitios-filter").style.display = checked ? "" : "none";
+    document.getElementById("channel-toggle-wrap").style.display = checked ? "none" : "";
+    if (checked) {
+      // Arrancar con el sitio ya seleccionado (si lo hay) tildado, para no
+      // mostrar un gráfico vacío apenas se activa el modo.
+      if (currentSensorIndex != null) compareSensorIndexes.add(currentSensorIndex);
+      if (!compareSensorIndexes.size && latestSensors.length) {
+        compareSensorIndexes.add(latestSensors[0].sensor_index);
+      }
+      renderGraficoSitiosFilter();
+      loadCompareHistory();
+    } else {
+      document.getElementById("graf-titulo").textContent = currentLabel ? `Histórico — ${currentLabel}` : "Seleccioná una institución para ver el histórico";
+      const chartEmpty = document.getElementById("chart-empty");
+      if (chartEmpty) chartEmpty.style.display = currentRows.length ? "none" : "flex";
+      renderChart(currentRows);
+    }
+  }
+
+  function renderGraficoSitiosFilter() {
+    const box = document.getElementById("grafico-sitios-filter");
+    if (!box) return;
+    box.innerHTML = latestSensors.map((s) => {
+      const checked = compareSensorIndexes.has(s.sensor_index) ? "checked" : "";
+      return `<label>
+        <input type="checkbox" value="${s.sensor_index}" ${checked}
+          onchange="toggleCompareSitio(${s.sensor_index}, this.checked)">
+        ${s.institucion || s.nombre}
+      </label>`;
+    }).join("");
+  }
+
+  function toggleCompareSitio(sensorIndex, checked) {
+    if (checked) compareSensorIndexes.add(sensorIndex);
+    else compareSensorIndexes.delete(sensorIndex);
+    loadCompareHistory();
+  }
+
+  async function loadCompareHistory() {
+    if (!compareMode) return;
+    currentRange = document.getElementById("sel-range-chart").value;
+    const indexes = Array.from(compareSensorIndexes);
+    const chartEmpty = document.getElementById("chart-empty");
+    if (!indexes.length) {
+      if (chart) chart.destroy();
+      if (chartEmpty) chartEmpty.style.display = "flex";
+      document.getElementById("graf-titulo").textContent = "Comparar sitios — elegí al menos uno";
+      return;
+    }
+    try {
+      const results = await Promise.all(indexes.map((idx) =>
+        fetch(`${API_BASE}/api/historico/${idx}?range=${currentRange}`).then((r) => r.json())
+      ));
+      compareRowsBySite = {};
+      indexes.forEach((idx, i) => { compareRowsBySite[idx] = results[i]; });
+      const anyData = Object.values(compareRowsBySite).some((rows) => rows.length);
+      if (chartEmpty) chartEmpty.style.display = anyData ? "none" : "flex";
+      renderChartCompare();
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  // ── Pestaña Historial: columnas, filtro de parámetros y rango de fechas
+  // personalizado. La tabla en pantalla siempre usa el formato normal del
+  // sitio; el estilo "reporte" (texto plano/fuente retro) vive solo en el
+  // PDF descargable (ver downloadHistorialPdf). ──
   let histRows = [];
-  let histViewMode = "normal"; // "normal" | "retro"
   let histHiddenParams = new Set(); // claves ocultadas a mano desde el filtro
 
   const HIST_COLS = [
@@ -1562,14 +1658,6 @@
     if (!custom) loadHistorialTable();
     // si es "custom" esperamos a que el usuario complete las dos fechas —
     // el onchange de esos inputs ya llama a loadHistorialTable().
-  }
-
-  function setHistView(mode) {
-    histViewMode = mode;
-    document.querySelectorAll("#hist-view-toggle .view-btn").forEach((b) => {
-      b.classList.toggle("active", b.dataset.view === mode);
-    });
-    renderHistTable();
   }
 
   // Arma el query string contra la API a partir de los controles actuales.
@@ -1644,8 +1732,7 @@
 
   function renderHistTable() {
     const cols = histColsVisibles();
-    document.getElementById("tabla-wrap").innerHTML =
-      histViewMode === "retro" ? renderTablaRetro(cols) : renderTablaNormal(cols);
+    document.getElementById("tabla-wrap").innerHTML = renderTablaNormal(cols);
   }
 
   function renderTablaNormal(cols) {
@@ -1659,30 +1746,6 @@
         <thead><tr><th>Fecha / hora</th>${headers}</tr></thead>
         <tbody>${filas}</tbody>
       </table>`;
-  }
-
-  // Vista "Reporte": texto plano/fuente retro, tipo resumen climatológico de
-  // estación meteorológica (inspirado en chajarialdia.com.ar/estacion) —
-  // fondo papel fijo, mayúsculas, líneas de guiones en vez de bordes.
-  function renderTablaRetro(cols) {
-    const filas = histRows.slice().reverse().map((r) => `<tr>
-        <td>${formatBsAsFull(r.timestamp)}</td>
-        ${cols.map((c) => `<td>${r[c.key] ?? "—"}</td>`).join("")}
-      </tr>`).join("");
-    const headers = cols.map((c) => `<th>${c.label.toUpperCase()} (${c.unit})</th>`).join("");
-    return `
-      <div class="report-view">
-        <div class="report-meta">
-          <span><b>ESTACIÓN:</b> ${currentLabel || "—"}</span>
-          <span><b>SENSOR:</b> #${currentSensorIndex}</span>
-          <span><b>RANGO:</b> ${histRangoTexto()}</span>
-          <span><b>REGISTROS:</b> ${histRows.length}</span>
-        </div>
-        <table>
-          <thead><tr><th>FECHA / HORA</th>${headers}</tr></thead>
-          <tbody>${filas}</tbody>
-        </table>
-      </div>`;
   }
 
   function downloadHistorialCsv() {
@@ -1714,12 +1777,11 @@
   function padRight(s, n) { s = String(s); return s.length >= n ? s.slice(0, n) : s + " ".repeat(n - s.length); }
   function padLeft(s, n) { s = String(s); return s.length >= n ? s.slice(0, n) : " ".repeat(n - s.length) + s; }
 
-  // Descarga el mismo listado en PDF de texto plano/fuente monoespaciada,
-  // estilo resumen climatologico de estacion meteorologica (inspirado en
-  // chajarialdia.com.ar/estacion) — siempre en ese formato "reporte",
-  // independientemente de si en pantalla esta puesta la vista Clasica o
-  // Reporte. Usa jsPDF con la fuente Courier incorporada (sin embeber
-  // archivos de fuente aparte).
+  // Descarga el listado en PDF de texto plano/fuente monoespaciada, estilo
+  // resumen climatologico de estacion meteorologica (inspirado en
+  // chajarialdia.com.ar/estacion) — este formato "reporte" vive solo acá,
+  // la tabla en pantalla usa siempre el formato normal del sitio. Usa jsPDF
+  // con la fuente Courier incorporada (sin embeber archivos de fuente aparte).
   function downloadHistorialPdf() {
     if (!histRows.length || currentSensorIndex == null) return;
     if (!window.jspdf || !window.jspdf.jsPDF) {
@@ -1760,7 +1822,7 @@
       doc.text("REGISTRO HISTORICO — CIENCIA CIUDADANA AMBIENTAL", marginLeft, y);
       y += lineHeight * 1.3;
       doc.setFont("courier", "normal");
-      doc.text(`ESTACION: ${currentLabel || "-"}    SENSOR: #${currentSensorIndex}    RANGO: ${histRangoTexto()}    REGISTROS: ${histRows.length}`, marginLeft, y);
+      doc.text(`SITIO: ${currentLabel || "-"}    SENSOR: #${currentSensorIndex}    RANGO: ${histRangoTexto()}    REGISTROS: ${histRows.length}`, marginLeft, y);
       y += lineHeight * 1.6;
       printColHeaders();
     }
@@ -1898,6 +1960,81 @@
     });
   }
 
+  // Gráfico del modo "Comparar sitios": un parámetro (getCompareParam()),
+  // una línea por sitio elegido en #grafico-sitios-filter, todas contra el
+  // mismo eje Y (mismo parámetro ⇒ misma unidad, a diferencia de
+  // renderChart() que superpone parámetros distintos con ejes separados).
+  // Los sitios no necesariamente miden en el mismo instante exacto (cada
+  // uno hace polling por su cuenta), así que el eje X se arma juntando
+  // todas las marcas de tiempo que aparecen en cualquiera de los sitios, y
+  // cada línea usa spanGaps para no cortarse en los huecos propios.
+  function renderChartCompare() {
+    const ctx = document.getElementById("history-chart");
+    const cs = getComputedStyle(document.documentElement);
+    const colorDim = cs.getPropertyValue("--text-dim").trim();
+    const colorBorder = cs.getPropertyValue("--border").trim();
+    const param = getCompareParam();
+    const def = CHART_PARAM_DEFS[param];
+    const indexes = Array.from(compareSensorIndexes);
+
+    const allTimestamps = Array.from(new Set(
+      indexes.flatMap((idx) => (compareRowsBySite[idx] || []).map((r) => r.timestamp))
+    )).sort();
+    const labels = allTimestamps.map((ts) => formatBsAsTime(ts));
+
+    const datasets = indexes.map((idx, i) => {
+      const rows = compareRowsBySite[idx] || [];
+      const byTs = new Map(rows.map((r) => [r.timestamp, r[param]]));
+      return {
+        label: siteLabel(idx),
+        data: allTimestamps.map((ts) => (byTs.has(ts) ? byTs.get(ts) : null)),
+        borderColor: siteColor(i),
+        backgroundColor: siteColor(i) + "14",
+        borderWidth: 2,
+        pointRadius: 0,
+        tension: 0.3,
+        fill: false,
+        spanGaps: true,
+      };
+    });
+
+    document.getElementById("graf-titulo").textContent =
+      `Comparando ${indexes.length} sitio${indexes.length === 1 ? "" : "s"} — ${def.label}`;
+
+    if (chart) chart.destroy();
+    chart = new Chart(ctx, {
+      type: "line",
+      data: { labels, datasets },
+      plugins: [aqiBandsPlugin],
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: "index", intersect: false },
+        plugins: {
+          legend: { display: true, labels: { color: colorDim, font: { family: "JetBrains Mono", size: 10 } } },
+          tooltip: {
+            backgroundColor: cs.getPropertyValue("--bg-panel").trim(), borderColor: colorBorder,
+            borderWidth: 1, titleColor: colorDim, bodyColor: cs.getPropertyValue("--text").trim(),
+            titleFont: { family: "JetBrains Mono", size: 10 }, bodyFont: { family: "JetBrains Mono", size: 12 },
+          },
+        },
+        scales: {
+          x: { ticks: { color: colorDim, font: { family: "JetBrains Mono", size: 10 }, maxTicksLimit: 12 }, grid: { color: colorBorder } },
+          y: {
+            ticks: { color: colorDim, font: { family: "JetBrains Mono", size: 10 } },
+            grid: { color: colorBorder },
+            title: {
+              display: true,
+              text: def.unit ? `${def.label} (${def.unit})` : def.label,
+              color: colorDim,
+              font: { family: "JetBrains Mono", size: 10 },
+            },
+          },
+        },
+      },
+    });
+  }
+
   function exportCsv() {
     if (!currentRows.length) return;
     const headers = ["timestamp_utc", "pm1_0", "pm2_5", "pm2_5_a", "pm2_5_b", "pm10_0", "temperatura_c", "humedad", "presion", "voc", "co2", "nox", "rssi"];
@@ -1914,7 +2051,40 @@
     URL.revokeObjectURL(url);
   }
 
-  document.getElementById("export-btn").addEventListener("click", exportCsv);
+  // Export CSV del modo "Comparar sitios": una columna por sitio (en vez de
+  // una por parámetro, como en exportCsv) para el único parámetro elegido.
+  function exportCsvCompare() {
+    const indexes = Array.from(compareSensorIndexes);
+    if (!indexes.length) return;
+    const param = getCompareParam();
+    const allTimestamps = Array.from(new Set(
+      indexes.flatMap((idx) => (compareRowsBySite[idx] || []).map((r) => r.timestamp))
+    )).sort();
+    if (!allTimestamps.length) return;
+    const headers = ["timestamp_utc", ...indexes.map((idx) => siteLabel(idx))];
+    const lines = [headers.map((h) => `"${h.replace(/"/g, '""')}"`).join(",")];
+    allTimestamps.forEach((ts) => {
+      const row = [ts];
+      indexes.forEach((idx) => {
+        const r = (compareRowsBySite[idx] || []).find((x) => x.timestamp === ts);
+        row.push(r && r[param] != null ? r[param] : "");
+      });
+      lines.push(row.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","));
+    });
+    const blob = new Blob([lines.join("\n")], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const def = CHART_PARAM_DEFS[param];
+    a.download = `comparacion_${def.label.replace(/\s+/g, "_")}_${currentRange}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  document.getElementById("export-btn").addEventListener("click", () => {
+    if (compareMode) exportCsvCompare();
+    else exportCsv();
+  });
   document.getElementById("toggle-channels").addEventListener("change", () => renderChart(currentRows));
 
   // El ícono sol/luna se muestra/oculta solo con CSS según [data-theme] (ver <style>).
