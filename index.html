@@ -1853,6 +1853,17 @@
     });
 
     const nombreArchivo = `${(currentLabel || "sensor").replace(/\s+/g, "_")}_historico_reporte.pdf`;
+    // Además de descargarlo, se abre en una pestaña nueva para poder verlo
+    // directo en el navegador (visor de PDF nativo) sin tener que ir a
+    // buscar el archivo descargado. Se abre primero, dentro del mismo
+    // gesto de click que disparó todo esto, para que el navegador no lo
+    // bloquee como popup.
+    try {
+      const blobUrl = doc.output("bloburl");
+      window.open(blobUrl, "_blank");
+    } catch (e) {
+      console.error("No se pudo abrir el PDF en una pestaña nueva:", e);
+    }
     doc.save(nombreArchivo);
   }
 
@@ -2106,7 +2117,7 @@
     if (id === "mapa") cargarMapa();
   }
 
-  const APP_VERSION = "v1.0.9";
+  const APP_VERSION = "v1.0.10";
 
   if (window.LemeitCommon) {
     LemeitCommon.initSwitcher("aq");
