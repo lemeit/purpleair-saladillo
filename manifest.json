@@ -1,0 +1,18 @@
+{
+  "name": "Aire Saladillo — Calidad de aire",
+  "short_name": "Aire Saladillo",
+  "description": "Calidad de aire en tiempo real en escuelas y jardines de Saladillo: PM1.0/PM2.5/PM10, VOC, CO2, NOx, temperatura, humedad y presión.",
+  "id": "/",
+  "start_url": "./?pwa=1",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#FAF7F2",
+  "theme_color": "#9B3D00",
+  "lang": "es-AR",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
